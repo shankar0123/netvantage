@@ -1,0 +1,103 @@
+# NetVantage Development Stack
+#
+# Usage:
+#   docker compose up -d        # Start all services
+#   docker compose down          # Stop all services
+#   docker compose down -v       # Stop and remove volumes (clean slate)
+#
+# Services:
+#   - NATS JetStream (transport, M1–M8)
+#   - Prometheus (metrics storage)
+#   - Grafana (dashboards)
+#   - PostgreSQL (control plane database)
+#   - Alertmanager (alert routing)
+#   - Routinator (RPKI validator for BGP analysis)
+
+services:
+  # --- Transport ---
+  nats:
+    image: nats:2.10-alpine
+    command: ["--jetstream", "--store_dir", "/data", "-p", "4222", "-m", "8222"]
+    ports:
+      - "4222:4222"   # Client connections
+      - "8222:8222"   # Monitoring/metrics
+    volumes:
+      - nats-data:/data
+    restart: unless-stopped
+
+  # --- Metrics & Visualization ---
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-remote-write-receiver"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=netvantage
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/home.json
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    restart: unless-stopped
+
+  # --- Control Plane Database ---
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: netvantage
+      POSTGRES_USER: netvantage
+      POSTGRES_PASSWORD: netvantage-dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # --- RPKI Validator ---
+  routinator:
+    image: nlnetlabs/routinator:latest
+    command: ["server", "--http", "0.0.0.0:8323", "--rtr", "0.0.0.0:3323"]
+    ports:
+      - "8323:8323"   # HTTP API (RPKI validation queries)
+      - "3323:3323"   # RTR protocol (router-to-cache)
+    volumes:
+      - routinator-data:/home/routinator/.rpki-cache
+    restart: unless-stopped
+
+volumes:
+  nats-data:
+  prometheus-data:
+  grafana-data:
+  alertmanager-data:
+  postgres-data:
+  routinator-data:

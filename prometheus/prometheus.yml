@@ -1,0 +1,42 @@
+# Prometheus configuration for NetVantage development stack.
+#
+# In production, this is managed via Helm values or ConfigMap.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "/etc/prometheus/rules/*.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  # Prometheus self-monitoring.
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # NATS JetStream monitoring.
+  - job_name: "nats"
+    static_configs:
+      - targets: ["nats:8222"]
+
+  # BGP Analyzer metrics.
+  - job_name: "bgp-analyzer"
+    static_configs:
+      - targets: ["host.docker.internal:9100"]
+    # TODO: Replace with bgp-analyzer service target when containerized.
+
+  # NetVantage agent metrics (when running locally).
+  # TODO(M3): Add agent Prometheus endpoint.
+
+  # NetVantage server metrics.
+  # TODO(M5): Add server Prometheus endpoint.
+
+# Remote write receiver is enabled via --web.enable-remote-write-receiver
+# flag in docker-compose.yml. The metrics processor writes to:
+#   http://prometheus:9090/api/v1/write

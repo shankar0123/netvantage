@@ -1,0 +1,122 @@
+# NetVantage Development Taskfile
+#
+# Install task runner: https://taskfile.dev/installation/
+# Usage: task <target>
+
+version: '3'
+
+vars:
+  GO_MODULE: github.com/netvantage/netvantage
+  BIN_DIR: ./bin
+
+tasks:
+  # --- Development Environment ---
+  dev-up:
+    desc: Start the full development stack (NATS, Prometheus, Grafana, PostgreSQL, Alertmanager, Routinator)
+    cmds:
+      - docker compose up -d
+      - echo "Stack running. Grafana at http://localhost:3000 (admin/netvantage)"
+
+  dev-down:
+    desc: Stop the development stack
+    cmds:
+      - docker compose down
+
+  dev-clean:
+    desc: Stop the development stack and remove all volumes (clean slate)
+    cmds:
+      - docker compose down -v
+
+  dev-logs:
+    desc: Tail logs from all dev stack services
+    cmds:
+      - docker compose logs -f
+
+  # --- Build ---
+  build-agent:
+    desc: Build the canary agent binary
+    cmds:
+      - go build -o {{.BIN_DIR}}/netvantage-agent ./cmd/agent/
+
+  build-server:
+    desc: Build the control plane server binary
+    cmds:
+      - go build -o {{.BIN_DIR}}/netvantage-server ./cmd/server/
+
+  build-processor:
+    desc: Build the metrics processor binary
+    cmds:
+      - go build -o {{.BIN_DIR}}/netvantage-processor ./cmd/processor/
+
+  build-bgp:
+    desc: Build the BGP Analyzer Docker image
+    cmds:
+      - docker build -t netvantage-bgp-analyzer:dev ./bgp-analyzer/
+
+  build-all:
+    desc: Build all Go binaries and BGP Analyzer image
+    deps: [build-agent, build-server, build-processor, build-bgp]
+
+  # --- Test ---
+  test:
+    desc: Run all Go unit tests
+    cmds:
+      - go test -v -race ./...
+
+  test-integration:
+    desc: Run Go integration tests (requires Docker for testcontainers)
+    cmds:
+      - go test -v -race -tags=integration ./internal/integration/...
+
+  test-bgp:
+    desc: Run BGP Analyzer Python tests
+    dir: bgp-analyzer
+    cmds:
+      - pip install -e ".[dev]" -q
+      - pytest -v
+
+  test-all:
+    desc: Run all tests (Go + Python)
+    deps: [test, test-bgp]
+
+  # --- Lint ---
+  lint:
+    desc: Run all linters (Go + Python)
+    cmds:
+      - task: lint-go
+      - task: lint-python
+
+  lint-go:
+    desc: Run Go linters
+    cmds:
+      - go vet ./...
+      - golangci-lint run
+
+  lint-python:
+    desc: Run Python linters (ruff)
+    dir: bgp-analyzer
+    cmds:
+      - ruff check src/ tests/
+
+  # --- Dashboards ---
+  dashboards-validate:
+    desc: Validate all Grafana dashboard JSON files
+    cmds:
+      - |
+        for f in grafana/dashboards/*.json; do
+          python3 -m json.tool "$f" > /dev/null || { echo "Invalid JSON: $f"; exit 1; }
+        done
+        echo "All dashboards valid."
+
+  # --- Protobuf (M9) ---
+  proto:
+    desc: Generate Go code from Protobuf schemas
+    cmds:
+      - echo "Protobuf generation not yet configured (M9)"
+
+  # --- Utilities ---
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -rf {{.BIN_DIR}}
+      - rm -f coverage.txt coverage.html

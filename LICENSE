@@ -1,0 +1,32 @@
+Business Source License 1.1
+
+Parameters
+
+Licensor:             NetVantage Authors
+Licensed Work:        NetVantage
+                      The Licensed Work is (c) 2026 NetVantage Authors.
+Additional Use Grant: You may make production use of the Licensed Work,
+                      provided that you do not use the Licensed Work for a
+                      Network Monitoring Service.
+
+                      A "Network Monitoring Service" is a commercial offering
+                      that allows third parties to access the functionality of
+                      the Licensed Work by providing synthetic network
+                      monitoring, BGP analysis, or route monitoring as a
+                      managed service.
+
+Change Date:          Four years from the date the Licensed Work is published.
+Change License:       Apache License, Version 2.0
+
+For the full text of the Business Source License 1.1, see:
+https://mariadb.com/bsl11/
+
+-----------------------------------------------------------------------------
+
+NOTE: The Additional Use Grant wording above is DRAFT and requires legal
+sign-off before v1.0.0 release. See CLAUDE.md pre-release gaps.
+
+-----------------------------------------------------------------------------
+
+For information about alternative licensing arrangements for the Software,
+please contact: [licensing contact TBD]

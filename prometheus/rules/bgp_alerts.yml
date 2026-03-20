@@ -1,0 +1,71 @@
+# BGP Alert Rules for NetVantage
+#
+# These ship as defaults with the platform. Users can customize
+# thresholds and add additional rules.
+
+groups:
+  - name: netvantage_bgp
+    rules:
+      # ALT-06: BGP Hijack Detection (Critical)
+      # Fires immediately when an unexpected origin AS is detected.
+      - alert: NetVantageBGPHijackDetected
+        expr: increase(netvantage_bgp_event_total{event_type="hijack"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "BGP hijack detected for {{ $labels.prefix }}"
+          description: "Unexpected origin AS {{ $labels.origin_asn }} announced prefix {{ $labels.prefix }}. Immediate investigation required."
+
+      # ALT-07: BGP Withdrawal Alert
+      # Fires when a monitored prefix is withdrawn and not re-announced.
+      - alert: NetVantageBGPWithdrawal
+        expr: increase(netvantage_bgp_event_total{event_type="withdrawal"}[10m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "BGP withdrawal detected for {{ $labels.prefix }}"
+          description: "Prefix {{ $labels.prefix }} was withdrawn by AS {{ $labels.peer_asn }}."
+
+      # ALT-08: BGP Analyzer Staleness
+      # Fires when the analyzer hasn't received updates for 5+ minutes.
+      - alert: NetVantageBGPAnalyzerStale
+        expr: time() - netvantage_bgp_analyzer_last_update > 300
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "BGP Analyzer feed stale for {{ $labels.collector }}"
+          description: "No BGP updates received from collector {{ $labels.collector }} for over 5 minutes. The BGP feed may be disconnected."
+
+      # ALT-13: RPKI-Invalid Announcement
+      # Fires when a monitored prefix is announced with RPKI status invalid.
+      - alert: NetVantageBGPRPKIInvalid
+        expr: netvantage_bgp_rpki_status{status="invalid"} == 1
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "RPKI-invalid announcement for {{ $labels.prefix }}"
+          description: "Prefix {{ $labels.prefix }} announced by AS {{ $labels.origin_asn }} has RPKI status INVALID. This may indicate a hijack or misconfiguration."
+
+      # ALT-14: ROA Expiry Warning
+      # Fires at progressive thresholds as ROA expiry approaches.
+      - alert: NetVantageBGPROAExpiringSoon
+        expr: netvantage_bgp_roa_expiry_days <= 7
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ROA expiring soon for {{ $labels.prefix }}"
+          description: "ROA for prefix {{ $labels.prefix }} expires in {{ $value }} days. Renew to avoid RPKI validation failures."
+
+      - alert: NetVantageBGPROAExpiryCritical
+        expr: netvantage_bgp_roa_expiry_days <= 1
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ROA expiring within 24 hours for {{ $labels.prefix }}"
+          description: "ROA for prefix {{ $labels.prefix }} expires in {{ $value }} days. Immediate action required."

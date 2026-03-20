@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  go:
+    name: Go (lint → test → build → vet)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -v -race -coverprofile=coverage.txt ./...
+
+      - name: Build agent
+        run: go build -o bin/netvantage-agent ./cmd/agent/
+
+      - name: Build server
+        run: go build -o bin/netvantage-server ./cmd/server/
+
+      - name: Build processor
+        run: go build -o bin/netvantage-processor ./cmd/processor/
+
+  python:
+    name: Python BGP Analyzer (lint → test → build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bgp-analyzer
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check src/ tests/
+
+      - name: Type check (mypy)
+        run: mypy src/
+        continue-on-error: true  # Non-blocking until type coverage improves.
+
+      - name: Test
+        run: pytest --tb=short -v
+
+      - name: Build Docker image
+        run: docker build -t netvantage-bgp-analyzer:ci .
+
+  dashboards:
+    name: Validate Grafana Dashboards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate dashboard JSON
+        run: |
+          for f in grafana/dashboards/*.json; do
+            python3 -m json.tool "$f" > /dev/null || { echo "Invalid JSON: $f"; exit 1; }
+          done
+          echo "All dashboard JSON files are valid."
