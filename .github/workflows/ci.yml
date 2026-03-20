@@ -17,6 +17,9 @@ jobs:
         with:
           go-version: "1.22"
 
+      - name: Tidy modules
+        run: go mod tidy
+
       - name: Lint
         uses: golangci/golangci-lint-action@v4
         with:
@@ -58,7 +61,7 @@ jobs:
 
       - name: Type check (mypy)
         run: mypy src/
-        continue-on-error: true  # Non-blocking until type coverage improves.
+        continue-on-error: true
 
       - name: Test
         run: pytest --tb=short -v

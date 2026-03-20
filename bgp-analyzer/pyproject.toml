@@ -6,7 +6,6 @@ requires-python = ">=3.10"
 license = {text = "BSL-1.1"}
 
 dependencies = [
-    "pybgpstream>=3.0.0",
     "prometheus-client>=0.20.0",
     "requests>=2.31.0",
     "structlog>=24.1.0",
@@ -14,6 +13,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# pybgpstream requires libparsebgp C library — install system deps first.
+# See bgp-analyzer/Dockerfile for the full dependency list.
+stream = [
+    "pybgpstream>=3.0.0",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",

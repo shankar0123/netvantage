@@ -1,0 +1,45 @@
+# NetVantage BGP Analyzer — Example Configuration
+#
+# Copy this file and customize for your network:
+#   cp config.example.yaml config.yaml
+#
+# Run with:
+#   python -m netvantage_bgp --config config.yaml
+
+# IP prefixes to monitor. Add your own IPv4 and IPv6 blocks.
+prefixes:
+  - "203.0.113.0/24"
+  - "2001:db8::/32"
+
+# Expected origin ASN for each monitored prefix.
+# Announcements from any other origin will trigger hijack alerts.
+expected_origins:
+  "203.0.113.0/24": 64500
+  "2001:db8::/32": 64500
+
+# BGP collectors to subscribe to.
+# Options: "routeviews", "ris" (RIPE RIS)
+collectors:
+  - "routeviews"
+  - "ris"
+
+# Routinator HTTP API URL for RPKI validation.
+# Default Docker Compose setup runs Routinator on port 8323.
+routinator_url: "http://localhost:8323"
+
+# Port for Prometheus metrics HTTP endpoint.
+metrics_port: 9100
+
+# Alert if no BGP updates received within this many seconds.
+staleness_threshold_seconds: 300
+
+# Days before ROA expiry to trigger warnings.
+# Alerts fire at each threshold (most urgent first).
+roa_expiry_warning_days:
+  - 30
+  - 14
+  - 7
+  - 1
+
+# Log level: debug, info, warning, error
+log_level: "info"
