@@ -8,10 +8,11 @@ Routinator exposes:
   - /api/v1/export.json — full validated ROA set (for ROA lifecycle monitoring)
 """
 
-import structlog
-import requests
 from dataclasses import dataclass
 from enum import Enum
+
+import requests
+import structlog
 
 logger = structlog.get_logger()
 

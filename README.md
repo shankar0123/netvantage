@@ -1,67 +1,65 @@
-# NetVantage
+# NetVantage — Distributed Network Monitoring & BGP Analysis
 
-**Distributed synthetic network monitoring and BGP analysis platform.**
+A source-available alternative to Cisco ThousandEyes. Deploy lightweight agents across your infrastructure, monitor reachability and performance from every vantage point, and correlate what you observe with what BGP says should be happening — with dashboards, alerts, and RPKI validation out of the box.
 
-A source-available alternative to Cisco ThousandEyes — combining distributed probe agents, passive BGP monitoring with RPKI validation, and traceroute-to-BGP path correlation in a single platform.
+[![license](https://img.shields.io/badge/license-BSL_1.1-green)](LICENSE)
+[![go](https://img.shields.io/badge/go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev)
+[![python](https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white)](https://python.org)
+[![status](https://img.shields.io/badge/status-active_development-brightgreen)](docs/ROADMAP.md)
 
-## Why NetVantage?
+## What It Does
 
-Existing open-source monitoring tools (Blackbox Exporter, Cloudprober, Uptime Kuma) handle synthetic probes well but stop there. None of them touch BGP routing analysis. Commercial platforms like ThousandEyes bundle both but cost $10k+/year.
+NetVantage gives you a single platform for synthetic monitoring *and* BGP routing analysis. The **canary agents** are single Go binaries (sub-10MB) that run at your Points of Presence and execute synthetic tests — ICMP ping, DNS resolution, HTTP/S with full timing breakdown, traceroute with per-hop ASN and geolocation enrichment. Results flow through NATS JetStream into Prometheus and Grafana dashboards that are provisioned as code and versioned in this repo.
 
-NetVantage bridges that gap: deploy lightweight agents across your infrastructure, monitor reachability and performance from every vantage point, and correlate what you observe with what BGP says should be happening — all with dashboards, alerts, and RPKI validation out of the box.
+The **BGP analyzer** is an independent Python service that monitors the global routing table via RouteViews and RIPE RIS. It detects prefix hijacks, MOAS conflicts, sub-prefix hijacks, unexpected withdrawals, and AS path anomalies for your IP space. Every announcement is validated against RPKI ROAs through Routinator, with immediate alerts on invalid origins and countdown warnings before your ROAs expire.
 
-### Key Capabilities
-
-**Synthetic Monitoring** — ICMP ping, DNS resolution, HTTP/S with full timing breakdown, and traceroute with per-hop ASN/geo enrichment. Agents run as single Go binaries with sub-10MB footprint.
-
-**BGP Analysis** — Passive monitoring of RouteViews and RIPE RIS collectors via pybgpstream. Detects prefix hijacks, MOAS conflicts, sub-prefix hijacks, unexpected withdrawals, and AS path changes for your monitored prefixes.
-
-**RPKI Route Origin Validation** — Every BGP announcement is validated against RPKI ROAs via Routinator. Alerts fire immediately on RPKI-invalid announcements. ROA lifecycle monitoring warns you before ROAs expire.
-
-**BGP + Traceroute Correlation** — Compares the AS path BGP announces with the AS path traceroute actually observes. Detects route leaks, traffic engineering issues, and hijacks that neither system catches alone.
-
-**Dashboard-as-Code** — Every feature ships with its Grafana dashboard and Prometheus alert rules, provisioned as code and versioned in this repo.
-
-## Architecture
+The **correlation engine** (M8) is what ties both systems together: it compares the AS path BGP announces against the AS path traceroute actually observes. Discrepancies reveal route leaks, traffic engineering problems, and hijacks that neither system catches alone. This is ThousandEyes-grade capability in a source-available package.
 
 ```mermaid
-graph LR
-    A["Canary Agents<br/>(Go, per POP)"] -->|publish results| B["NATS JetStream<br/>(or Kafka M9+)"]
-    B -->|consume| C[Metrics Processor]
-    C -->|remote_write| D[Prometheus]
-    E["BGP Analyzer<br/>(Python)"] -->|write metrics| D
-    D --> F[Grafana Dashboards]
-    G["Control Plane API<br/>(Go)"] -->|config sync<br/>registration<br/>heartbeats| A
-    G --> H[PostgreSQL]
+graph TB
+    subgraph POPs
+        A1["Agent (POP 1)"]
+        A2["Agent (POP 2)"]
+    end
+
+    subgraph Hub
+        NATS[NATS JetStream]
+        MP[Metrics Processor]
+        PROM[Prometheus]
+        GRAF[Grafana Dashboards]
+        ROUT[Routinator — RPKI]
+        CP[Control Plane API]
+        PG[PostgreSQL]
+    end
+
+    BGP["BGP Analyzer (Python)"]
+
+    A1 -->|publish results| NATS
+    A2 -->|publish results| NATS
+    NATS -->|consume| MP
+    MP -->|remote_write| PROM
+    BGP -->|write metrics| PROM
+    BGP -->|validate ROAs| ROUT
+    PROM --> GRAF
+    CP --> PG
+    CP -->|config sync| A1
+    CP -->|config sync| A2
 ```
 
-Agents communicate through a transport abstraction layer (`Publisher`/`Consumer` interfaces), defaulting to NATS JetStream for development and small deployments. Kafka is available as a production backend for 50+ POP deployments. The swap requires a single config change — no code changes.
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design.
+Agents communicate through a transport abstraction layer (`Publisher`/`Consumer` interfaces), defaulting to NATS JetStream for development and small deployments. Kafka is available as a production backend for 50+ POP deployments — the swap requires a single config change, no code changes.
 
 ## Quick Start
 
-### Prerequisites
-
-- Docker and Docker Compose
-- Go 1.22+ (for building agents)
-- [Task](https://taskfile.dev) (task runner, replaces Make)
-
-### Start the Dev Stack
-
 ```bash
-# Clone the repo
-git clone https://github.com/<your-username>/netvantage.git
+git clone https://github.com/shankar0123/netvantage.git
 cd netvantage
 
-# Start all infrastructure (NATS, Prometheus, Grafana, PostgreSQL, Alertmanager, Routinator)
+# Start all infrastructure
 task dev-up
 
-# Verify services are running
-task dev-logs
+# Build Go services
+task build-agent && task build-server && task build-processor
 ```
-
-### Access Services
 
 | Service | URL | Credentials |
 |---|---|---|
@@ -70,35 +68,17 @@ task dev-logs
 | NATS Monitoring | http://localhost:8222 | — |
 | Alertmanager | http://localhost:9093 | — |
 
-### Build and Run
-
-```bash
-# Build all Go binaries
-task build-agent
-task build-server
-task build-processor
-
-# Build BGP Analyzer container
-task build-bgp
-
-# Run tests
-task test          # Go unit tests
-task test-bgp      # Python BGP tests
-task lint-go       # Go linting
-task lint-python   # Python linting
-```
-
-See [docs/quickstart.md](docs/quickstart.md) for a detailed walkthrough.
+See the [Guided Demo](docs/quickstart.md) for a full walkthrough with explanations at every step.
 
 ## Project Status
 
-NetVantage is in active early development. See the [Roadmap](docs/ROADMAP.md) for the full milestone plan.
+NetVantage is in active early development. The BGP analyzer — our primary competitive differentiator — ships first because it has zero dependency on the Go agent pipeline.
 
 | Milestone | Status | Description |
 |---|---|---|
 | M1: Scaffolding | ✅ Complete | Project structure, transport abstraction, dev stack |
-| M2: BGP Analysis | 🔜 Next | Hijack detection, RPKI validation, BGP dashboards |
-| M3: Ping Canary | Planned | First canary type, end-to-end pipeline proof |
+| M2: BGP Analysis | ✅ Complete | Hijack detection, RPKI validation, BGP dashboards |
+| M3: Ping Canary | 🔜 Next | First canary type, end-to-end pipeline proof |
 | M4: DNS Canary | Planned | DNS monitoring with resolver comparison |
 | M5: Control Plane | Planned | Centralized agent management API |
 | M6: HTTP/S Canary | Planned | Web monitoring with TLS validation |
@@ -107,30 +87,30 @@ NetVantage is in active early development. See the [Roadmap](docs/ROADMAP.md) fo
 | M9: Hardening | Planned | Kafka backend, Protobuf, Helm, security |
 | M10: Release Prep | Planned | Dashboard suite, docs, release gates |
 
+## Documentation
+
+| Doc | What You'll Learn |
+|---|---|
+| **[Understanding NetVantage](docs/concepts.md)** | Start here. The problem space, BGP, RPKI, and how everything fits together — no networking background required. |
+| **[Guided Demo](docs/quickstart.md)** | Get the full stack running locally with explanations at every step. |
+| **[BGP Monitoring Demo](docs/quickstart-bgp.md)** | Set up hijack detection, RPKI validation, and explore the BGP dashboard. |
+| **[Architecture](docs/ARCHITECTURE.md)** | Technical deep dive with design rationale for every decision. |
+| **[Contributing](docs/CONTRIBUTING.md)** | Development workflow, conventions, and how to add canary types. |
+
 ## Tech Stack
 
 | Component | Technology |
 |---|---|
 | Agent & Control Plane | Go 1.22+ |
 | BGP Analyzer | Python 3.12 (pybgpstream) |
-| Message Transport | NATS JetStream (default), Kafka (production) |
+| Message Transport | NATS JetStream (default) · Kafka (production) |
 | Metrics & Visualization | Prometheus + Grafana |
 | RPKI Validation | Routinator |
 | Database | PostgreSQL |
 | CI/CD | GitHub Actions |
-| Task Runner | [Taskfile](https://taskfile.dev) |
-
-## Documentation
-
-- [Understanding NetVantage](docs/concepts.md) — start here if you're new. Explains the problem space, BGP, RPKI, and how everything fits together — no networking background required.
-- [Guided Demo](docs/quickstart.md) — get the full stack running locally with explanations at every step
-- [BGP Monitoring Demo](docs/quickstart-bgp.md) — set up hijack detection, RPKI validation, and explore the BGP dashboard
-- [Architecture](docs/ARCHITECTURE.md) — technical deep dive with design rationale for every decision
-- [Roadmap](docs/ROADMAP.md) — milestone plan with deliverables and requirement IDs
-- [Contributing](docs/CONTRIBUTING.md) — development workflow, conventions, and how to add canary types
 
 ## License
 
 NetVantage is source-available under the [Business Source License 1.1](LICENSE). Free for non-competing production use. Converts to Apache 2.0 four years after each release.
 
-**TL;DR:** Use it for monitoring your own infrastructure, contribute to it, build internal tools with it — all fine. Don't resell it as a competing managed monitoring service.
+Use it for monitoring your own infrastructure, contribute to it, build internal tools with it — all fine. Don't resell it as a competing managed monitoring service.

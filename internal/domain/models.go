@@ -13,8 +13,8 @@ type Agent struct {
 	Status          AgentStatus       `json:"status"`
 	Capabilities    []string          `json:"capabilities"`
 	Labels          map[string]string `json:"labels,omitempty"`
-	LastHeartbeat   time.Time         `json:"last_heartbeat"`
-	RegisteredAt    time.Time         `json:"registered_at"`
+	LastHeartbeat time.Time `json:"last_heartbeat"`
+	RegisteredAt  time.Time `json:"registered_at"`
 }
 
 // GeoLocation represents geographic coordinates for a POP.
@@ -29,8 +29,8 @@ type GeoLocation struct {
 type AgentStatus string
 
 const (
-	AgentStatusOnline  AgentStatus = "online"
-	AgentStatusOffline AgentStatus = "offline"
+	AgentStatusOnline   AgentStatus = "online"
+	AgentStatusOffline  AgentStatus = "offline"
 	AgentStatusDegraded AgentStatus = "degraded"
 )
 

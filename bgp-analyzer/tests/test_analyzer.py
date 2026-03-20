@@ -3,13 +3,11 @@
 Tests use mock BGP data — no live pybgpstream required.
 """
 
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from netvantage_bgp.analyzer import BGPAnalyzer, PrefixState
 from netvantage_bgp.config import AnalyzerConfig
 from netvantage_bgp.rpki import RPKIResult, RPKIStatus
-
 
 # ---------------------------------------------------------------------------
 # PrefixState tests

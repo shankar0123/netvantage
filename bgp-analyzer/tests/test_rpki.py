@@ -1,9 +1,8 @@
 """Tests for RPKI validation module."""
 
-import pytest
 from unittest.mock import MagicMock, patch
 
-from netvantage_bgp.rpki import RPKIValidator, RPKIStatus
+from netvantage_bgp.rpki import RPKIStatus, RPKIValidator
 
 
 class TestRPKIValidator:

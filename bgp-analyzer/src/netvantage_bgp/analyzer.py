@@ -15,11 +15,11 @@ import time
 from datetime import datetime, timezone
 
 import structlog
-from prometheus_client import Counter, Gauge, Histogram
+from prometheus_client import Counter, Gauge
 
 from netvantage_bgp.config import AnalyzerConfig
-from netvantage_bgp.prefix import matches_any_monitored, is_sub_prefix
-from netvantage_bgp.rpki import RPKIValidator, RPKIStatus
+from netvantage_bgp.prefix import is_sub_prefix, matches_any_monitored
+from netvantage_bgp.rpki import RPKIStatus, RPKIValidator
 
 logger = structlog.get_logger()
 

@@ -3,11 +3,11 @@
 import pytest
 
 from netvantage_bgp.prefix import (
+    is_sub_prefix,
+    matches_any_monitored,
     parse_prefix,
     prefix_contains,
-    is_sub_prefix,
     prefixes_overlap,
-    matches_any_monitored,
 )
 
 

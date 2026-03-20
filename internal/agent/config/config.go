@@ -8,12 +8,11 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
-
-	"encoding/json"
 )
 
 // Config is the top-level agent configuration.

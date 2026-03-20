@@ -84,9 +84,9 @@ func (t *Transport) ensureStream() error {
 	_, err = t.js.AddStream(&nats.StreamConfig{
 		Name:     streamName,
 		Subjects: []string{"netvantage.>"},
-		Storage:  nats.FileStorage,
+		Storage:   nats.FileStorage,
 		Retention: nats.LimitsPolicy,
-		MaxAge:   24 * time.Hour, // Retain messages for 24h.
+		MaxAge:    24 * time.Hour, // Retain messages for 24h.
 		Replicas: 1,
 	})
 	if err != nil {
