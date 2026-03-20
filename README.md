@@ -122,10 +122,12 @@ NetVantage is in active early development. See the [Roadmap](docs/ROADMAP.md) fo
 
 ## Documentation
 
-- [Architecture](docs/ARCHITECTURE.md) — system design, data flow, transport abstraction, resilience patterns
+- [Understanding NetVantage](docs/concepts.md) — start here if you're new. Explains the problem space, BGP, RPKI, and how everything fits together — no networking background required.
+- [Guided Demo](docs/quickstart.md) — get the full stack running locally with explanations at every step
+- [BGP Monitoring Demo](docs/quickstart-bgp.md) — set up hijack detection, RPKI validation, and explore the BGP dashboard
+- [Architecture](docs/ARCHITECTURE.md) — technical deep dive with design rationale for every decision
 - [Roadmap](docs/ROADMAP.md) — milestone plan with deliverables and requirement IDs
-- [Quick Start](docs/quickstart.md) — get running in 5 minutes
-- [Contributing](docs/CONTRIBUTING.md) — development workflow, conventions, how to add canary types
+- [Contributing](docs/CONTRIBUTING.md) — development workflow, conventions, and how to add canary types
 
 ## License
 
