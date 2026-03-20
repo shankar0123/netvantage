@@ -8,32 +8,35 @@ A separate Python-based BGP analyzer monitors global routing tables independentl
 
 ## Core Data Flow
 
-```
-                    ┌──────────────────────────────────────────────┐
-                    │                    Hub                        │
-                    │                                              │
-┌──────────┐       │  ┌────────────┐    ┌──────────┐             │
-│  Agent    │──────▶│  │   NATS     │───▶│ Metrics  │──remote──┐  │
-│  (POP 1)  │       │  │ JetStream  │    │Processor │  write   │  │
-└──────────┘       │  └────────────┘    └──────────┘          │  │
-                    │        ▲                                  ▼  │
-┌──────────┐       │        │           ┌──────────────────────┐  │
-│  Agent    │───────│────────┘           │    Prometheus        │  │
-│  (POP 2)  │       │                    └──────────┬───────────┘  │
-└──────────┘       │                               │              │
-                    │                               ▼              │
-┌──────────┐       │  ┌────────────┐    ┌──────────────────────┐  │
-│  BGP      │──────▶│  │ Routinator │    │      Grafana         │  │
-│ Analyzer  │       │  │  (RPKI)    │    │    Dashboards        │  │
-└──────────┘       │  └────────────┘    └──────────────────────┘  │
-                    │                                              │
-                    │  ┌────────────┐    ┌──────────────────────┐  │
-                    │  │ PostgreSQL │◀───│   Control Plane API  │  │
-                    │  └────────────┘    └──────────────────────┘  │
-                    │                           ▲                  │
-                    └───────────────────────────│──────────────────┘
-                                                │
-                              agent registration, config sync, heartbeats
+```mermaid
+graph TB
+    subgraph POPs
+        A1["Agent (POP 1)"]
+        A2["Agent (POP 2)"]
+    end
+
+    subgraph Hub
+        NATS[NATS JetStream]
+        MP[Metrics Processor]
+        PROM[Prometheus]
+        GRAF[Grafana Dashboards]
+        ROUT[Routinator - RPKI]
+        CP[Control Plane API]
+        PG[PostgreSQL]
+    end
+
+    BGP["BGP Analyzer (Python)"]
+
+    A1 -->|publish results| NATS
+    A2 -->|publish results| NATS
+    NATS -->|consume| MP
+    MP -->|remote_write| PROM
+    BGP -->|write metrics| PROM
+    BGP -->|validate ROAs| ROUT
+    PROM --> GRAF
+    CP --> PG
+    CP -->|config sync<br/>registration<br/>heartbeats| A1
+    CP -->|config sync<br/>registration<br/>heartbeats| A2
 ```
 
 ## Component Details

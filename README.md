@@ -24,25 +24,15 @@ NetVantage bridges that gap: deploy lightweight agents across your infrastructur
 
 ## Architecture
 
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────┐
-│  Canary Agents   │────▶│  NATS JetStream   │────▶│   Metrics   │
-│  (Go, per POP)   │     │  (or Kafka M9+)   │     │  Processor  │
-└─────────────────┘     └──────────────────┘     └──────┬──────┘
-                                                         │
-┌─────────────────┐                              ┌──────▼──────┐
-│  BGP Analyzer    │─────────────────────────────▶│  Prometheus  │
-│  (Python)        │                              └──────┬──────┘
-└─────────────────┘                                      │
-                                                  ┌──────▼──────┐
-┌─────────────────┐                              │   Grafana    │
-│  Control Plane   │◀── agent registration ──────│  Dashboards  │
-│  API (Go)        │    config sync, heartbeats  └─────────────┘
-└────────┬────────┘
-         │
-  ┌──────▼──────┐
-  │  PostgreSQL  │
-  └─────────────┘
+```mermaid
+graph LR
+    A["Canary Agents<br/>(Go, per POP)"] -->|publish results| B["NATS JetStream<br/>(or Kafka M9+)"]
+    B -->|consume| C[Metrics Processor]
+    C -->|remote_write| D[Prometheus]
+    E["BGP Analyzer<br/>(Python)"] -->|write metrics| D
+    D --> F[Grafana Dashboards]
+    G["Control Plane API<br/>(Go)"] -->|config sync<br/>registration<br/>heartbeats| A
+    G --> H[PostgreSQL]
 ```
 
 Agents communicate through a transport abstraction layer (`Publisher`/`Consumer` interfaces), defaulting to NATS JetStream for development and small deployments. Kafka is available as a production backend for 50+ POP deployments. The swap requires a single config change — no code changes.

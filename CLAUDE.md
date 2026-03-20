@@ -56,32 +56,18 @@ _Nothing yet — project is in PRD/design phase._
 
 ### Core Data Flow
 
-```
-Canary Agent (Go)
-  → executes tests (ping/dns/http/traceroute)
-  → publishes results to transport (NATS JetStream or Kafka)
-
-Metrics Processor (Go)
-  → consumes from transport
-  → computes derived metrics
-  → writes to Prometheus via remote_write
-
-BGP Analyzer (Python, independent service)
-  → subscribes to RouteViews/RIPE RIS via pybgpstream
-  → detects routing anomalies
-  → writes metrics directly to Prometheus
-
-Control Plane API (Go)
-  → agent registration, test CRUD, config sync
-  → backed by PostgreSQL
-
-Grafana
-  → queries Prometheus
-  → dashboards provisioned as code
-
-Alertmanager
-  → evaluates Prometheus rules
-  → routes to Slack, PagerDuty, email, webhooks
+```mermaid
+graph LR
+    CA["Canary Agent (Go)"] -->|publish results| T["Transport<br/>(NATS JetStream / Kafka)"]
+    T -->|consume| MP["Metrics Processor (Go)"]
+    MP -->|remote_write| PROM[Prometheus]
+    BGP["BGP Analyzer (Python)"] -->|write metrics| PROM
+    BGP -->|subscribe| RIS["RouteViews / RIPE RIS"]
+    CP["Control Plane API (Go)"] --> PG[PostgreSQL]
+    CP -->|config sync| CA
+    PROM --> GRAF[Grafana]
+    PROM --> AM[Alertmanager]
+    AM -->|route alerts| OUT["Slack / PagerDuty / Email / Webhooks"]
 ```
 
 ### Transport Abstraction (Critical Design Pattern)
