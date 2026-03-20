@@ -473,6 +473,13 @@ _Finalized during M1 scaffolding. Update this section as files are created._
 - Tagged `<version>` and `latest`
 - Multi-arch: `linux/amd64`, `linux/arm64`
 
+### Diagramming
+- All diagrams use **Mermaid** (`.mermaid` files or fenced code blocks in Markdown)
+- No ASCII art, draw.io, Lucidchart, or image-based diagrams in the repo
+- Architecture diagrams, sequence diagrams, flowcharts, and entity-relationship diagrams are all Mermaid
+- Diagrams live alongside the docs that reference them or inline as fenced blocks
+- CI may validate Mermaid syntax in the future; keep diagrams parseable
+
 ### Commits
 - Conventional commits: `feat:`, `fix:`, `docs:`, `chore:`, `test:`, `ci:`
 - PRs reference milestone and requirement IDs (e.g., `feat(bgp): implement hijack detection [M2, BGP-04]`)
