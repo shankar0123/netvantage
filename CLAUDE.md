@@ -97,7 +97,7 @@ type MessageHandler func(ctx context.Context, msg []byte) error
 
 Implementations:
 - `internal/transport/nats/` — NATS JetStream (default, ships M1)
-- `internal/transport/kafka/` — Kafka (production scale, ships M8)
+- `internal/transport/kafka/` — Kafka (production scale, ships M9)
 - `internal/transport/memory/` — In-memory (unit tests only)
 
 Selection via agent config: `transport.backend: nats | kafka`
