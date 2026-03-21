@@ -19,6 +19,7 @@ import (
 
 	"github.com/netvantage/netvantage/internal/agent"
 	"github.com/netvantage/netvantage/internal/agent/buffer"
+	"github.com/netvantage/netvantage/internal/agent/canary/ping"
 	"github.com/netvantage/netvantage/internal/agent/config"
 	natsTransport "github.com/netvantage/netvantage/internal/transport/nats"
 )
@@ -54,10 +55,12 @@ func main() {
 	// Create and configure the agent.
 	a := agent.New(cfg, transport, buf, logger)
 
-	// TODO(M2): Register ping canary.
-	// TODO(M3): Register DNS canary.
-	// TODO(M5): Register HTTP canary.
-	// TODO(M6): Register traceroute canary.
+	// Register canary types.
+	a.RegisterCanary(ping.New())
+
+	// TODO(M4): Register DNS canary.
+	// TODO(M6): Register HTTP canary.
+	// TODO(M7): Register traceroute canary.
 
 	// Run with graceful shutdown on SIGINT/SIGTERM.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

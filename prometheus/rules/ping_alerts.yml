@@ -1,0 +1,79 @@
+# Ping Alert Rules for NetVantage
+#
+# These ship as defaults with the platform. Users can customize
+# thresholds and add additional rules.
+#
+# Metrics come from the Metrics Processor, which consumes ping results
+# from NATS and exposes them as Prometheus gauges.
+
+groups:
+  - name: netvantage_ping
+    rules:
+      # ALT-01: High Latency
+      # Fires when average ping RTT exceeds 200ms for 5 minutes.
+      # Threshold is deliberately conservative — tune per-environment.
+      - alert: NetVantagePingHighLatency
+        expr: netvantage_ping_rtt_seconds{stat="avg"} > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High ping latency to {{ $labels.target }} from {{ $labels.pop }}"
+          description: "Average RTT to {{ $labels.target }} from POP {{ $labels.pop }} is {{ $value | humanizeDuration }}. Threshold: 200ms."
+
+      # ALT-01b: Critical Latency
+      # Fires when average ping RTT exceeds 500ms.
+      - alert: NetVantagePingCriticalLatency
+        expr: netvantage_ping_rtt_seconds{stat="avg"} > 0.5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical ping latency to {{ $labels.target }} from {{ $labels.pop }}"
+          description: "Average RTT to {{ $labels.target }} from POP {{ $labels.pop }} is {{ $value | humanizeDuration }}. Threshold: 500ms."
+
+      # ALT-03: Target Unreachable
+      # Fires when packet loss reaches 100% — target is completely unreachable.
+      - alert: NetVantagePingTargetUnreachable
+        expr: netvantage_ping_packet_loss_ratio == 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Target {{ $labels.target }} unreachable from {{ $labels.pop }}"
+          description: "100% packet loss to {{ $labels.target }} from POP {{ $labels.pop }} for over 2 minutes. Target may be down or network path is broken."
+
+      # ALT-03b: High Packet Loss
+      # Fires when packet loss exceeds 20% but target is still partially reachable.
+      - alert: NetVantagePingHighPacketLoss
+        expr: netvantage_ping_packet_loss_ratio > 0.2 and netvantage_ping_packet_loss_ratio < 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High packet loss to {{ $labels.target }} from {{ $labels.pop }}"
+          description: "{{ $value | humanizePercentage }} packet loss to {{ $labels.target }} from POP {{ $labels.pop }}. Threshold: 20%."
+
+      # ALT-10: Agent Down
+      # Fires when no ping results have been received from an agent for 5 minutes.
+      # Uses the processor's results counter — if it stops incrementing, the agent
+      # is likely down or disconnected from the transport.
+      - alert: NetVantageAgentDown
+        expr: changes(netvantage_processor_results_total{test_type="ping"}[5m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Agent {{ $labels.pop }} appears down"
+          description: "No ping results received from POP {{ $labels.pop }} for over 5 minutes. The agent may be offline or disconnected from the transport."
+
+      # High Jitter
+      # Fires when jitter exceeds 50ms, indicating an unstable network path.
+      - alert: NetVantagePingHighJitter
+        expr: netvantage_ping_jitter_seconds > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High jitter to {{ $labels.target }} from {{ $labels.pop }}"
+          description: "Jitter to {{ $labels.target }} from POP {{ $labels.pop }} is {{ $value | humanizeDuration }}. Threshold: 50ms."

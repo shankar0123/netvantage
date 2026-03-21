@@ -1,11 +1,12 @@
 // NetVantage Metrics Processor
 //
 // The processor consumes test results from the transport layer (NATS/Kafka),
-// computes derived metrics, and writes to Prometheus via remote_write.
+// computes derived metrics, and exposes them as Prometheus metrics on /metrics.
 //
 // Usage:
 //
 //	netvantage-processor
+//	NETVANTAGE_PROCESSOR_ADDR=:9091 netvantage-processor
 package main
 
 import (
@@ -14,6 +15,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/netvantage/netvantage/internal/processor"
+	natsTransport "github.com/netvantage/netvantage/internal/transport/nats"
 )
 
 func main() {
@@ -21,17 +25,41 @@ func main() {
 		Level: slog.LevelInfo,
 	}))
 
-	logger.Info("metrics processor starting")
+	// Transport connection.
+	natsURL := os.Getenv("NETVANTAGE_NATS_URL")
+	if natsURL == "" {
+		natsURL = "nats://localhost:4222"
+	}
 
-	// TODO(M3): Initialize transport consumer (NATS JetStream).
-	// TODO(M3): Subscribe to netvantage.ping.results, parse, write to Prometheus.
-	// TODO(M4): Subscribe to netvantage.dns.results.
-	// TODO(M6): Subscribe to netvantage.http.results.
-	// TODO(M7): Subscribe to netvantage.traceroute.results — flatten hop arrays.
+	transport, err := natsTransport.New(natsTransport.Config{
+		URL: natsURL,
+	}, logger)
+	if err != nil {
+		logger.Error("failed to connect to transport", "error", err)
+		os.Exit(1)
+	}
+	defer transport.Close()
+
+	// Metrics HTTP address.
+	metricsAddr := os.Getenv("NETVANTAGE_PROCESSOR_ADDR")
+	if metricsAddr == "" {
+		metricsAddr = ":9091"
+	}
+
+	p := processor.New(transport, logger)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	<-ctx.Done()
+	logger.Info("metrics processor starting",
+		"nats_url", natsURL,
+		"metrics_addr", metricsAddr,
+	)
+
+	if err := p.Run(ctx, metricsAddr); err != nil {
+		logger.Error("processor exited with error", "error", err)
+		os.Exit(1)
+	}
+
 	logger.Info("metrics processor stopped")
 }

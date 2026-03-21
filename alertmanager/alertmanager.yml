@@ -18,12 +18,20 @@ route:
   receiver: 'default'
 
   routes:
-    # Critical BGP alerts (hijacks, RPKI-invalid) get immediate routing.
+    # Critical alerts (BGP hijacks, RPKI-invalid, target unreachable) get immediate routing.
     - match:
         severity: critical
       receiver: 'critical'
       group_wait: 0s
       repeat_interval: 1h
+
+    # Ping-specific routing — group by target to avoid alert storms.
+    - match_re:
+        alertname: 'NetVantagePing.*'
+      group_by: ['alertname', 'target', 'pop']
+      receiver: 'default'
+      group_wait: 30s
+      repeat_interval: 4h
 
 receivers:
   - name: 'default'

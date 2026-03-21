@@ -31,8 +31,13 @@ scrape_configs:
       - targets: ["host.docker.internal:9100"]
     # TODO: Replace with bgp-analyzer service target when containerized.
 
+  # NetVantage Metrics Processor.
+  - job_name: "netvantage-processor"
+    static_configs:
+      - targets: ["host.docker.internal:9091"]
+
   # NetVantage agent metrics (when running locally).
-  # TODO(M3): Add agent Prometheus endpoint.
+  # TODO: Add agent Prometheus endpoint when agent exposes metrics.
 
   # NetVantage server metrics.
   # TODO(M5): Add server Prometheus endpoint.
