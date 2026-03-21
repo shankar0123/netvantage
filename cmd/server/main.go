@@ -17,6 +17,12 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/netvantage/netvantage/internal/server/api/router"
+	serverconfig "github.com/netvantage/netvantage/internal/server/config"
+	"github.com/netvantage/netvantage/internal/server/repository/postgres"
 )
 
 func main() {
@@ -24,26 +30,54 @@ func main() {
 		Level: slog.LevelInfo,
 	}))
 
-	// TODO(M5): Initialize PostgreSQL connection pool.
-	// TODO(M5): Initialize services and repositories.
-	// TODO(M5): Build router with handler registration.
+	cfg := serverconfig.Load()
+	if err := cfg.Validate(); err != nil {
+		logger.Error("invalid config", "error", err)
+		os.Exit(1)
+	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	// Connect to PostgreSQL.
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		logger.Error("database connection failed", "error", err)
+		os.Exit(1)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(ctx); err != nil {
+		logger.Error("database ping failed", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("database connected")
+
+	// Initialize repositories.
+	agents := postgres.NewAgentRepo(pool)
+	pops := postgres.NewPOPRepo(pool)
+	tests := postgres.NewTestRepo(pool)
+	assignments := postgres.NewAssignmentRepo(pool)
+	apiKeys := postgres.NewAPIKeyRepo(pool)
+
+	// Build router.
+	r := router.New(router.Deps{
+		Agents:      agents,
+		POPs:        pops,
+		Tests:       tests,
+		Assignments: assignments,
+		APIKeys:     apiKeys,
+		Logger:      logger,
 	})
 
 	srv := &http.Server{
-		Addr:         ":8080",
-		Handler:      mux,
+		Addr:         cfg.Addr,
+		Handler:      r,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
 	// Graceful shutdown.
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	sigCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	go func() {
@@ -54,7 +88,7 @@ func main() {
 		}
 	}()
 
-	<-ctx.Done()
+	<-sigCtx.Done()
 	logger.Info("shutting down server...")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

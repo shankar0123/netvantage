@@ -1,0 +1,20 @@
+groups:
+  - name: netvantage_platform
+    rules:
+      - alert: NetVantageProcessorDown
+        expr: up{job="netvantage-processor"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Metrics Processor is down"
+          description: "The NetVantage metrics processor has not been scraped for 2 minutes."
+
+      - alert: NetVantageHighProcessingErrorRate
+        expr: sum(rate(netvantage_processing_errors_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High processing error rate"
+          description: "Processing error rate exceeds 0.1/s for 5 minutes."
