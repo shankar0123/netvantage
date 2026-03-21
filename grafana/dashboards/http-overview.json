@@ -1,0 +1,149 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "Response Time Breakdown",
+      "description": "HTTP request phase timing: DNS lookup, TCP connect, TLS handshake, time to first byte, total",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 20, "stacking": { "mode": "normal" } } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "total" }, "properties": [{ "id": "custom.stacking", "value": { "mode": "none" } }, { "id": "custom.lineWidth", "value": 2 }] }
+        ]
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "netvantage_http_duration_seconds{target=~\"$target\", pop=~\"$pop\", phase!=\"transfer\"}", "legendFormat": "{{ phase }} — {{ target }}" }
+      ]
+    },
+    {
+      "title": "Status Code Distribution",
+      "description": "HTTP response status codes over time",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "netvantage_http_status_code{target=~\"$target\", pop=~\"$pop\"}", "legendFormat": "{{ target }} @ {{ pop }}" }
+      ]
+    },
+    {
+      "title": "TLS Certificate Expiry",
+      "description": "Days until TLS certificate expires for each target",
+      "type": "bargauge",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "d",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 14 },
+              { "color": "yellow", "value": 30 },
+              { "color": "green", "value": 60 }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": { "orientation": "horizontal", "displayMode": "gradient", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "expr": "netvantage_http_cert_expiry_days{target=~\"$target\", pop=~\"$pop\"}", "legendFormat": "{{ target }}" }
+      ]
+    },
+    {
+      "title": "Time to First Byte (TTFB)",
+      "description": "Time from request sent to first response byte received",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "netvantage_http_duration_seconds{target=~\"$target\", pop=~\"$pop\", phase=\"ttfb\"}", "legendFormat": "{{ target }} @ {{ pop }}" }
+      ]
+    },
+    {
+      "title": "DNS Lookup Time",
+      "description": "DNS resolution phase of HTTP requests",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "netvantage_http_duration_seconds{target=~\"$target\", pop=~\"$pop\", phase=\"dns\"}", "legendFormat": "{{ target }} @ {{ pop }}" }
+      ]
+    },
+    {
+      "title": "TCP + TLS Handshake",
+      "description": "Connection establishment and TLS negotiation time",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "netvantage_http_duration_seconds{target=~\"$target\", pop=~\"$pop\", phase=~\"tcp|tls\"}", "legendFormat": "{{ phase }} — {{ target }} @ {{ pop }}" }
+      ]
+    },
+    {
+      "title": "Current Status",
+      "description": "Current HTTP check status for all targets",
+      "type": "table",
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true },
+      "transformations": [
+        { "id": "merge" },
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "agent_id": true } } }
+      ],
+      "targets": [
+        { "expr": "netvantage_http_status_code{target=~\"$target\", pop=~\"$pop\"}", "legendFormat": "", "format": "table", "instant": true },
+        { "expr": "netvantage_http_duration_seconds{target=~\"$target\", pop=~\"$pop\", phase=\"total\"}", "legendFormat": "", "format": "table", "instant": true }
+      ]
+    },
+    {
+      "title": "Results Processed",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "rate(netvantage_processor_results_total{test_type=\"http\"}[5m])", "legendFormat": "{{ pop }}" }
+      ]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["netvantage", "http", "canary"],
+  "templating": {
+    "list": [
+      { "current": {}, "hide": 0, "name": "DS_PROMETHEUS", "type": "datasource", "query": "prometheus" },
+      { "current": {}, "hide": 0, "name": "target", "type": "query", "query": "label_values(netvantage_http_status_code, target)", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "includeAll": true, "multi": true, "allValue": ".*" },
+      { "current": {}, "hide": 0, "name": "pop", "type": "query", "query": "label_values(netvantage_http_status_code, pop)", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "includeAll": true, "multi": true, "allValue": ".*" }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "NetVantage — HTTP Overview",
+  "uid": "netvantage-http-overview"
+}

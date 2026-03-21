@@ -47,6 +47,11 @@ type Processor struct {
 	dnsResolutionTime *prometheus.GaugeVec
 	dnsResponseCode   *prometheus.GaugeVec
 
+	// HTTP metrics.
+	httpDuration   *prometheus.GaugeVec
+	httpStatusCode *prometheus.GaugeVec
+	httpCertExpiry *prometheus.GaugeVec
+
 	// General metrics.
 	resultsProcessed *prometheus.CounterVec
 	processingErrors *prometheus.CounterVec
@@ -91,6 +96,21 @@ func New(consumer transport.Consumer, logger *slog.Logger) *Processor {
 			Help: "DNS response code (1=this code observed, use label to identify code)",
 		}, []string{"target", "pop", "agent_id", "resolver", "response_code"}),
 
+		httpDuration: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "netvantage_http_duration_seconds",
+			Help: "HTTP request phase duration in seconds",
+		}, []string{"target", "pop", "agent_id", "phase"}),
+
+		httpStatusCode: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "netvantage_http_status_code",
+			Help: "HTTP response status code",
+		}, []string{"target", "pop", "agent_id"}),
+
+		httpCertExpiry: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "netvantage_http_cert_expiry_days",
+			Help: "Days until TLS certificate expires",
+		}, []string{"target", "pop", "agent_id"}),
+
 		resultsProcessed: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "netvantage_processor_results_total",
 			Help: "Total test results processed",
@@ -107,6 +127,9 @@ func New(consumer transport.Consumer, logger *slog.Logger) *Processor {
 	reg.MustRegister(p.pingJitter)
 	reg.MustRegister(p.dnsResolutionTime)
 	reg.MustRegister(p.dnsResponseCode)
+	reg.MustRegister(p.httpDuration)
+	reg.MustRegister(p.httpStatusCode)
+	reg.MustRegister(p.httpCertExpiry)
 	reg.MustRegister(p.resultsProcessed)
 	reg.MustRegister(p.processingErrors)
 
@@ -150,7 +173,12 @@ func (p *Processor) Run(ctx context.Context, metricsAddr string) error {
 		}
 	}()
 
-	// TODO(M6): Subscribe to netvantage.http.results
+	go func() {
+		if err := p.consumer.Subscribe(ctx, "netvantage.http.results", p.handleHTTPResult); err != nil {
+			p.logger.Error("http subscription error", "error", err)
+		}
+	}()
+
 	// TODO(M7): Subscribe to netvantage.traceroute.results
 
 	// Block until shutdown.
@@ -270,4 +298,63 @@ type dnsResolverResult struct {
 	ResolvedValues   []string `json:"resolved_values"`
 	Success          bool     `json:"success"`
 	Error            string   `json:"error,omitempty"`
+}
+
+// handleHTTPResult processes a single HTTP test result from the transport.
+func (p *Processor) handleHTTPResult(_ context.Context, msg []byte) error {
+	var result canary.Result
+	if err := json.Unmarshal(msg, &result); err != nil {
+		p.processingErrors.WithLabelValues("http", "unmarshal").Inc()
+		p.logger.Error("failed to unmarshal http result", "error", err)
+		return nil
+	}
+
+	p.resultsProcessed.WithLabelValues("http", result.POPName).Inc()
+
+	var metrics httpResultMetrics
+	if err := json.Unmarshal(result.Metrics, &metrics); err != nil {
+		p.processingErrors.WithLabelValues("http", "metrics_unmarshal").Inc()
+		p.logger.Error("failed to unmarshal http metrics", "error", err, "test_id", result.TestID)
+		return nil
+	}
+
+	labels := []string{result.Target, result.POPName, result.AgentID}
+
+	// Phase durations (ms → seconds).
+	p.httpDuration.WithLabelValues(append(labels, "dns")...).Set(metrics.DNSMS / 1000.0)
+	p.httpDuration.WithLabelValues(append(labels, "tcp")...).Set(metrics.TCPMS / 1000.0)
+	p.httpDuration.WithLabelValues(append(labels, "tls")...).Set(metrics.TLSMS / 1000.0)
+	p.httpDuration.WithLabelValues(append(labels, "ttfb")...).Set(metrics.TTFBMS / 1000.0)
+	p.httpDuration.WithLabelValues(append(labels, "total")...).Set(metrics.TotalMS / 1000.0)
+	p.httpDuration.WithLabelValues(append(labels, "transfer")...).Set(metrics.TransferMS / 1000.0)
+
+	p.httpStatusCode.WithLabelValues(labels...).Set(float64(metrics.StatusCode))
+
+	if metrics.CertExpiryDays > 0 {
+		p.httpCertExpiry.WithLabelValues(labels...).Set(metrics.CertExpiryDays)
+	}
+
+	p.logger.Debug("processed http result",
+		"target", result.Target,
+		"pop", result.POPName,
+		"status", metrics.StatusCode,
+		"total_ms", fmt.Sprintf("%.2f", metrics.TotalMS),
+	)
+
+	return nil
+}
+
+// httpResultMetrics mirrors the Metrics struct from the http canary package.
+type httpResultMetrics struct {
+	DNSMS          float64 `json:"dns_ms"`
+	TCPMS          float64 `json:"tcp_ms"`
+	TLSMS          float64 `json:"tls_ms"`
+	TTFBMS         float64 `json:"ttfb_ms"`
+	TotalMS        float64 `json:"total_ms"`
+	TransferMS     float64 `json:"transfer_ms"`
+	StatusCode     int     `json:"status_code"`
+	ContentLength  int64   `json:"content_length"`
+	CertExpiryDays float64 `json:"cert_expiry_days"`
+	RedirectCount  int     `json:"redirect_count"`
+	ContentMatched bool    `json:"content_matched"`
 }

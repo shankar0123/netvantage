@@ -1,0 +1,65 @@
+groups:
+  - name: netvantage_http
+    rules:
+      - alert: NetVantageHTTP5xx
+        expr: netvantage_http_status_code >= 500
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "HTTP 5xx from {{ $labels.target }}"
+          description: "Target {{ $labels.target }} at POP {{ $labels.pop }} returning status {{ $value }} for 2 minutes."
+
+      - alert: NetVantageHTTPHighLatency
+        expr: netvantage_http_duration_seconds{phase="total"} > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow HTTP response from {{ $labels.target }}"
+          description: "Total HTTP duration for {{ $labels.target }} at POP {{ $labels.pop }} exceeds 2s for 5 minutes."
+
+      - alert: NetVantageHTTPCriticalLatency
+        expr: netvantage_http_duration_seconds{phase="total"} > 5
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical HTTP latency for {{ $labels.target }}"
+          description: "Total HTTP duration for {{ $labels.target }} at POP {{ $labels.pop }} exceeds 5s for 2 minutes."
+
+      - alert: NetVantageTLSCertExpiry30d
+        expr: netvantage_http_cert_expiry_days > 0 and netvantage_http_cert_expiry_days <= 30
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "TLS certificate for {{ $labels.target }} expires in {{ $value }} days"
+          description: "Certificate at POP {{ $labels.pop }} expires within 30 days."
+
+      - alert: NetVantageTLSCertExpiry14d
+        expr: netvantage_http_cert_expiry_days > 0 and netvantage_http_cert_expiry_days <= 14
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "TLS certificate for {{ $labels.target }} expires in {{ $value }} days"
+          description: "Certificate at POP {{ $labels.pop }} expires within 14 days."
+
+      - alert: NetVantageTLSCertExpiry7d
+        expr: netvantage_http_cert_expiry_days > 0 and netvantage_http_cert_expiry_days <= 7
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          summary: "TLS certificate for {{ $labels.target }} expires in {{ $value }} days"
+          description: "Certificate at POP {{ $labels.pop }} expires within 7 days. Immediate renewal required."
+
+      - alert: NetVantageTLSCertExpiry1d
+        expr: netvantage_http_cert_expiry_days > 0 and netvantage_http_cert_expiry_days <= 1
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "TLS certificate for {{ $labels.target }} expires TOMORROW"
+          description: "Certificate at POP {{ $labels.pop }} expires in less than 24 hours."
