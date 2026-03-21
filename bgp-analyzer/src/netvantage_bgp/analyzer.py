@@ -19,6 +19,7 @@ from prometheus_client import Counter, Gauge
 
 from netvantage_bgp.config import AnalyzerConfig
 from netvantage_bgp.prefix import is_sub_prefix, matches_any_monitored
+from netvantage_bgp.publisher import SyncBGPPathPublisher
 from netvantage_bgp.rpki import RPKIStatus, RPKIValidator
 
 logger = structlog.get_logger()
@@ -153,6 +154,11 @@ class BGPAnalyzer:
         self._stop_event = threading.Event()
         self._roa_thread: threading.Thread | None = None
 
+        # NATS publisher for BGP+Traceroute correlation (M8).
+        self._publisher: SyncBGPPathPublisher | None = None
+        if config.nats_url:
+            self._publisher = SyncBGPPathPublisher(config.nats_url)
+
         logger.info(
             "bgp_analyzer_initialized",
             prefix_count=len(self.monitored_prefixes),
@@ -164,6 +170,10 @@ class BGPAnalyzer:
     def run(self) -> None:
         """Start the BGP analysis loop. Blocks until stopped."""
         logger.info("bgp_analyzer_starting")
+
+        # Connect NATS publisher for path correlation.
+        if self._publisher:
+            self._publisher.connect()
 
         # Start ROA lifecycle monitor in background thread.
         self._roa_thread = threading.Thread(
@@ -177,6 +187,8 @@ class BGPAnalyzer:
         """Signal the analyzer to stop."""
         logger.info("bgp_analyzer_stopping")
         self._stop_event.set()
+        if self._publisher:
+            self._publisher.close()
 
     def _stream_loop(self) -> None:
         """Main BGP stream consumption loop using pybgpstream."""
@@ -338,6 +350,16 @@ class BGPAnalyzer:
         # --- RPKI Validation ---
         self._validate_rpki(prefix, origin_asn, collector)
 
+        # --- Publish to NATS for BGP+Traceroute Correlation (M8) ---
+        if self._publisher:
+            self._publisher.publish_announcement(
+                prefix=prefix,
+                origin_asn=origin_asn,
+                as_path=as_path,
+                peer_asn=peer_asn,
+                collector=collector,
+            )
+
     def _handle_withdrawal(
         self,
         prefix: str,
@@ -362,6 +384,14 @@ class BGPAnalyzer:
             collector=collector,
             had_previous_state=prev is not None,
         )
+
+        # Publish to NATS for BGP+Traceroute Correlation (M8).
+        if self._publisher:
+            self._publisher.publish_withdrawal(
+                prefix=prefix,
+                peer_asn=peer_asn,
+                collector=collector,
+            )
 
     def _check_hijack(
         self, prefix: str, origin_asn: int, matched_monitored: str, collector: str

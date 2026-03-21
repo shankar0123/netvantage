@@ -31,5 +31,9 @@ class AnalyzerConfig:
     # ROA expiry warning thresholds in days.
     roa_expiry_warning_days: list[int] = field(default_factory=lambda: [30, 14, 7, 1])
 
+    # NATS URL for publishing BGP path updates (used by M8 correlation engine).
+    # Set to empty string to disable NATS publishing (correlation unavailable).
+    nats_url: str = "nats://localhost:4222"
+
     # Log level.
     log_level: str = "info"

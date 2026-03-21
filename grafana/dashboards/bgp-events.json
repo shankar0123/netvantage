@@ -238,10 +238,74 @@
           "legendFormat": "{{collector}}"
         }
       ]
+    },
+    {
+      "title": "--- BGP + Traceroute Correlation (M8) ---",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+      "collapsed": false
+    },
+    {
+      "title": "Path Correlation Status",
+      "description": "Current correlation status per prefix/POP. 1=exact match, 0.5=partial (transit diverges), 0=mismatch (origin differs), -1=insufficient data",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 33 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "1": { "text": "MATCH", "color": "green" }, "0.5": { "text": "PARTIAL", "color": "yellow" }, "0": { "text": "MISMATCH", "color": "red" }, "-1": { "text": "NO DATA", "color": "blue" } }, "type": "value" }
+          ],
+          "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 0.5 }, { "color": "green", "value": 1 }] }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "textMode": "auto" },
+      "targets": [
+        { "expr": "netvantage_path_correlation_status{prefix=~\"$prefix\"}", "legendFormat": "{{ prefix }} → {{ target }} @ {{ pop }}" }
+      ]
+    },
+    {
+      "title": "Path Mismatches Over Time",
+      "description": "Timeline of BGP vs. traceroute path mismatches — spikes indicate routing anomalies",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 33 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "drawStyle": "bars", "fillOpacity": 80 }, "color": { "mode": "palette-classic" } }
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "increase(netvantage_path_correlation_mismatch_total{prefix=~\"$prefix\"}[5m])", "legendFormat": "{{ match_type }}: {{ prefix }} @ {{ pop }}" }
+      ]
+    },
+    {
+      "title": "BGP vs. Traceroute Path Comparison",
+      "description": "Side-by-side view of BGP-announced and traceroute-observed AS paths. Compare the paths to identify discrepancies, route leaks, and traffic engineering.",
+      "type": "table",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 39 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true },
+      "targets": [
+        { "expr": "netvantage_path_correlation_status{prefix=~\"$prefix\"}", "legendFormat": "", "format": "table", "instant": true },
+        { "expr": "netvantage_path_correlation_evaluations_total{prefix=~\"$prefix\"}", "legendFormat": "", "format": "table", "instant": true }
+      ]
+    },
+    {
+      "title": "Correlation Evaluations Rate",
+      "description": "Rate of correlation evaluations — shows how actively the engine is comparing paths",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 45 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "fillOpacity": 10 } } },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "rate(netvantage_path_correlation_evaluations_total{prefix=~\"$prefix\"}[5m])", "legendFormat": "{{ prefix }} @ {{ pop }}" }
+      ]
     }
   ],
   "schemaVersion": 39,
-  "tags": ["netvantage", "bgp"],
+  "tags": ["netvantage", "bgp", "correlation"],
   "templating": {
     "list": [
       {

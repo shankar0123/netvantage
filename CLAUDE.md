@@ -46,8 +46,8 @@ These are **closed**. Do not revisit unless evidence forces a change. If a decis
 - [x] **M5: Control Plane API** — REST API (chi + PostgreSQL), agent registration, test CRUD, config sync, API key auth, rate limiting, Platform Health dashboard
 - [x] **M6: HTTP/S Canary** — httptrace timing breakdown (DNS/TCP/TLS/TTFB/total), TLS cert validation, content matching, redirect tracking, HTTP Overview dashboard
 - [x] **M7: Traceroute Canary** — mtr/scamper dual backend, per-hop metrics (RTT/loss/ASN), AS path extraction, path change detection, Traceroute Overview dashboard
-- [ ] **M8: BGP + Traceroute Correlation** — _next milestone_
-- [ ] M9: Production Hardening
+- [x] **M8: BGP + Traceroute Correlation** — correlation engine comparing BGP vs traceroute AS paths, NATS bridge from Python BGP analyzer, match classification (exact/partial/mismatch), correlation panels in BGP dashboard, 3 alert rules
+- [ ] **M9: Production Hardening** — _next milestone_
 - [ ] M10: Dashboard Suite & Release Prep
 
 ### Pre-release Gaps (must resolve before v1.0.0)
@@ -497,20 +497,24 @@ _Finalized during M1 scaffolding. Update this section as files are created._
 
 ## Working Context
 
-**Current focus:** M8 BGP + Traceroute Correlation.
+**Current focus:** M9 Production Hardening.
 
-**Completed:** M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M7 ✅
+**Completed:** M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M7 ✅ → M8 ✅
 
 **Immediate next steps:**
-1. AS path reconstruction from traceroute hop ASN data (TR-08)
-2. Correlation engine: compare reconstructed AS path against BGP-observed AS path for same prefix
-3. Discrepancy detection: alert when traceroute AS path diverges from BGP-announced path
-4. Prometheus metrics: `netvantage_path_correlation_mismatch_total{prefix, pop}`
-5. Grafana panel addition to BGP dashboard: correlated path view showing BGP vs. observed paths side-by-side
-6. Integration tests with recorded BGP + traceroute data pairs
+1. Kafka transport backend: implement `Publisher`/`Consumer` interfaces for Kafka with SASL/SCRAM or mTLS (SEC-01)
+2. JSON → Protobuf migration for transport messages; schema definitions in `proto/`
+3. Grafana auth: OAuth2/OIDC SSO, disable anonymous access, RBAC (SEC-03)
+4. Secrets management: Vault/K8s Secrets/SOPS support, no plaintext secrets (SEC-07)
+5. Binary signing with cosign/sigstore, SBOM generation (SEC-06)
+6. Helm chart: all components with persistent volumes, resource limits, NetworkPolicy defaults
+7. Prometheus/Alertmanager UIs behind authed reverse proxy (SEC-05)
+8. Audit logging on all Control Plane mutations (SEC-09)
+9. POP deployment documentation: AWS, GCP, Azure, bare-metal guides (POP-01)
+10. Load testing at 100+ simulated POPs
 
 **Milestone sequence:**
-~~M1 Scaffolding~~ → ~~M2 BGP~~ → ~~M3 Ping~~ → ~~M4 DNS~~ → ~~M5 Control Plane~~ → ~~M6 HTTP~~ → ~~M7 Traceroute~~ → **M8 BGP+Traceroute Correlation** → M9 Hardening → M10 Release Prep
+~~M1 Scaffolding~~ → ~~M2 BGP~~ → ~~M3 Ping~~ → ~~M4 DNS~~ → ~~M5 Control Plane~~ → ~~M6 HTTP~~ → ~~M7 Traceroute~~ → ~~M8 BGP+Traceroute Correlation~~ → **M9 Hardening** → M10 Release Prep
 
 **Legal blockers (must resolve before v1.0.0):**
 - BSL Additional Use Grant wording — legal sign-off needed

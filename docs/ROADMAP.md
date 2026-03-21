@@ -16,8 +16,8 @@ M4  DNS Canary         ✅ resolver comparison, content validation
 M5  Control Plane      ✅ agent registration, test CRUD, config sync, auth
 M6  HTTP/S Canary      ✅ timing breakdown, TLS validation, content matching
 M7  Traceroute Canary  ✅ hop-by-hop path mapping, AS enrichment, path change detection
-M8  BGP+TR Correlation ⬜ compare BGP-announced AS paths vs. traceroute-observed paths ← NEXT
-M9  Hardening          ⬜ Kafka backend, Protobuf, security, Helm, load testing
+M8  BGP+TR Correlation ✅ compare BGP-announced AS paths vs. traceroute-observed paths
+M9  Hardening          ⬜ Kafka backend, Protobuf, security, Helm, load testing ← NEXT
 M10 Release Prep       ⬜ dashboard suite, docs, release gates
 ```
 
@@ -173,7 +173,7 @@ All must be true:
 
 - [x] BGP Analyzer v1 with RPKI validation detecting hijacks and routing anomalies (M2) ✅
 - [x] Four canary types operational end-to-end: ping, DNS, HTTP, traceroute (M3–M7) ✅
-- [ ] BGP + Traceroute path correlation detecting AS path discrepancies (M8)
+- [x] BGP + Traceroute path correlation detecting AS path discrepancies (M8) ✅
 - [x] Control Plane API with auth, test CRUD, agent registration, config sync (M5) ✅
 - [ ] 10 Grafana dashboards deployed and provisioned as code (7 of 10 done)
 - [x] Alerting suite with Alertmanager routing to Slack, PagerDuty, email, webhooks ✅

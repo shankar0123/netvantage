@@ -1,0 +1,29 @@
+groups:
+  - name: netvantage_path_correlation
+    rules:
+      - alert: NetVantagePathCorrelationMismatch
+        expr: increase(netvantage_path_correlation_mismatch_total{match_type="mismatch"}[10m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "BGP/Traceroute AS path mismatch for {{ $labels.prefix }}"
+          description: "The traceroute-observed AS path to {{ $labels.prefix }} from POP {{ $labels.pop }} diverges from the BGP-announced AS path. This may indicate a route leak, traffic engineering issue, or BGP hijack. Investigate immediately."
+
+      - alert: NetVantagePathCorrelationPartial
+        expr: increase(netvantage_path_correlation_mismatch_total{match_type="partial"}[30m]) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Persistent partial path mismatch for {{ $labels.prefix }}"
+          description: "The traceroute-observed AS path to {{ $labels.prefix }} from POP {{ $labels.pop }} has repeatedly shown transit path divergence from the BGP-announced path. Origin AS matches but transit differs — likely traffic engineering or asymmetric routing."
+
+      - alert: NetVantagePathCorrelationDown
+        expr: netvantage_path_correlation_status == 0
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Sustained path correlation failure for {{ $labels.prefix }}"
+          description: "The BGP vs. traceroute path correlation for {{ $labels.prefix }} (target {{ $labels.target }}) from POP {{ $labels.pop }} has been in mismatch state for 15 minutes. This is a strong signal of a routing anomaly."

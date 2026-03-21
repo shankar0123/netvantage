@@ -30,6 +30,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/netvantage/netvantage/internal/agent/canary"
+	"github.com/netvantage/netvantage/internal/processor/correlation"
 	"github.com/netvantage/netvantage/internal/transport"
 )
 
@@ -63,6 +64,9 @@ type Processor struct {
 
 	// Path change detection state: target@pop → last AS path hash.
 	lastASPaths map[string]string
+
+	// BGP + Traceroute correlation engine (M8).
+	correlator *correlation.Engine
 
 	// General metrics.
 	resultsProcessed *prometheus.CounterVec
@@ -177,6 +181,9 @@ func New(consumer transport.Consumer, logger *slog.Logger) *Processor {
 	reg.MustRegister(p.resultsProcessed)
 	reg.MustRegister(p.processingErrors)
 
+	// Initialize the BGP + Traceroute correlation engine.
+	p.correlator = correlation.New(reg, logger)
+
 	return p
 }
 
@@ -226,6 +233,13 @@ func (p *Processor) Run(ctx context.Context, metricsAddr string) error {
 	go func() {
 		if err := p.consumer.Subscribe(ctx, "netvantage.traceroute.results", p.handleTracerouteResult); err != nil {
 			p.logger.Error("traceroute subscription error", "error", err)
+		}
+	}()
+
+	// Subscribe to BGP path updates for correlation (M8).
+	go func() {
+		if err := p.consumer.Subscribe(ctx, "netvantage.bgp.paths", p.correlator.HandleBGPUpdate); err != nil {
+			p.logger.Error("bgp paths subscription error", "error", err)
 		}
 	}()
 
@@ -479,6 +493,12 @@ func (p *Processor) handleTracerouteResult(_ context.Context, msg []byte) error 
 		"hops", metrics.HopCount,
 		"reached", metrics.ReachedTarget,
 		"as_path", currentPath,
+	)
+
+	// Feed into BGP+Traceroute correlation engine (M8).
+	p.correlator.HandleTracerouteResult(
+		result.Target, result.POPName, result.AgentID,
+		metrics.ASPath, metrics.HopCount, metrics.ReachedTarget,
 	)
 
 	return nil

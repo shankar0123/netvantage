@@ -211,6 +211,9 @@ Prometheus alert rules live in `prometheus/rules/` and route through Alertmanage
 | `NetVantageTraceroutePathChange` | warning | AS path change detected |
 | `NetVantageTracerouteHighHopLoss` | warning | > 50% loss at a hop for 10m |
 | `NetVantageTracerouteHighLatencyHop` | warning | > 500ms RTT at a hop for 10m |
+| `NetVantagePathCorrelationMismatch` | critical | BGP/Traceroute AS path origin mismatch |
+| `NetVantagePathCorrelationPartial` | warning | Persistent transit path divergence for 30m |
+| `NetVantagePathCorrelationDown` | critical | Sustained path mismatch for 15m |
 | `NetVantageProcessorDown` | critical | Metrics Processor unreachable for 2m |
 | `NetVantageHighProcessingErrorRate` | warning | Error rate > 0.1/s for 5m |
 
@@ -239,8 +242,8 @@ NetVantage is in active early development. The BGP analyzer — our primary comp
 | M5: Control Plane | ✅ Complete | Centralized agent management API |
 | M6: HTTP/S Canary | ✅ Complete | Web monitoring with TLS validation |
 | M7: Traceroute | ✅ Complete | Hop-by-hop path mapping with AS path detection |
-| M8: BGP+Traceroute | 🔜 Next | AS path correlation engine |
-| M9: Hardening | Planned | Kafka backend, Protobuf, Helm, security |
+| M8: BGP+Traceroute | ✅ Complete | AS path correlation engine — BGP vs. traceroute comparison |
+| M9: Hardening | 🔜 Next | Kafka backend, Protobuf, Helm, security |
 | M10: Release Prep | Planned | Dashboard suite, docs, release gates |
 
 ## Documentation
@@ -322,9 +325,9 @@ Web service monitoring with full timing breakdown. HTTP/S canary with GET/POST/H
 
 Hop-by-hop network path mapping with dual backend support. `mtr --json` default with `scamper` optional (Paris traceroute). Per-hop metrics: IP, RTT (min/avg/max/stddev), packet loss, ASN, hostname. Path change detection between consecutive runs via AS path comparison. Configurable cycle count (default 10), max hops, packet size, probe protocol (ICMP/UDP/TCP). Prometheus metrics (`netvantage_traceroute_hop_rtt_seconds`, `netvantage_traceroute_hop_loss_ratio`, `netvantage_traceroute_hop_count`, `netvantage_traceroute_path_change_total`, `netvantage_traceroute_reachable`), Traceroute Overview Grafana dashboard with per-hop latency heatmap, reachability status, path change timeline, hop RTT/loss time series, and current path table. Alert rules for unreachable targets, AS path changes, high per-hop loss, and high per-hop latency.
 
-#### M8: BGP + Traceroute Correlation 🔜
+#### M8: BGP + Traceroute Correlation ✅
 
-The feature that justifies having both BGP and traceroute in one platform. AS path reconstruction from traceroute hop ASN data, correlation engine comparing reconstructed AS path against BGP-observed AS path for the same prefix, discrepancy detection alerting when traceroute diverges from BGP announcements. Reveals route leaks, traffic engineering issues, and hijacks that neither system catches alone. Prometheus metrics (`netvantage_path_correlation_mismatch_total{prefix, pop}`), correlated path view in BGP dashboard showing BGP vs. observed paths side-by-side.
+The feature that justifies having both BGP and traceroute in one platform. The correlation engine (`internal/processor/correlation/`) compares BGP-announced AS paths against traceroute-observed AS paths in real time. BGP Analyzer publishes path updates to NATS (`netvantage.bgp.paths`) via `nats-py`; the Go processor subscribes and correlates against incoming traceroute results. Match classification: exact (traceroute path is contiguous subsequence of BGP path), partial (same origin but transit diverges), mismatch (origin AS differs — potential hijack), insufficient (not enough data). Prometheus metrics: `netvantage_path_correlation_mismatch_total{prefix, pop, match_type}`, `netvantage_path_correlation_status{prefix, pop, target}`, `netvantage_path_correlation_evaluations_total`. BGP dashboard extended with correlation section: status panel, mismatch timeline, path comparison table, evaluation rate. Three alert rules: mismatch (critical), persistent partial divergence (warning), sustained mismatch (critical).
 
 #### M9: Production Hardening
 
