@@ -1,0 +1,227 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "DNS resolution monitoring — resolution time, response codes, resolver comparison. DASH-03.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Resolution Time by Target",
+      "description": "DNS resolution time per target and resolver. Spikes indicate resolver or network issues.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10,
+            "showPoints": "auto"
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "netvantage_dns_resolution_seconds{target=~\"$target\", pop=~\"$pop\", resolver=~\"$resolver\"}",
+          "legendFormat": "{{ target }} ({{ resolver }}, {{ pop }})"
+        }
+      ]
+    },
+    {
+      "title": "Response Codes",
+      "description": "DNS response code distribution. NOERROR is healthy. NXDOMAIN, SERVFAIL, TIMEOUT need investigation.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 50,
+            "stacking": { "mode": "normal" }
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "netvantage_dns_response_code{target=~\"$target\", pop=~\"$pop\", resolver=~\"$resolver\"}",
+          "legendFormat": "{{ target }} {{ response_code }} ({{ resolver }})"
+        }
+      ]
+    },
+    {
+      "title": "Resolution Time Histogram",
+      "description": "Distribution of DNS resolution times across all targets and resolvers.",
+      "type": "heatmap",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "options": {
+        "calculate": true,
+        "yAxis": { "unit": "s" },
+        "color": { "scheme": "Blues" },
+        "cellGap": 1,
+        "tooltip": { "show": true }
+      },
+      "targets": [
+        {
+          "expr": "netvantage_dns_resolution_seconds{target=~\"$target\", pop=~\"$pop\", resolver=~\"$resolver\"}",
+          "legendFormat": "{{ target }} ({{ resolver }})"
+        }
+      ]
+    },
+    {
+      "title": "Resolver Comparison",
+      "description": "Side-by-side resolution time across resolvers for the same target. Reveals resolver-specific issues.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 5
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "netvantage_dns_resolution_seconds{target=~\"$target\", pop=~\"$pop\"}",
+          "legendFormat": "{{ resolver }} → {{ target }} ({{ pop }})"
+        }
+      ]
+    },
+    {
+      "title": "Current Status",
+      "description": "At-a-glance DNS status table — latest resolution time and response code per target/resolver.",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Value #time" },
+            "properties": [
+              { "id": "displayName", "value": "Resolution Time" },
+              { "id": "unit", "value": "s" }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "Resolution Time", "desc": true }]
+      },
+      "targets": [
+        {
+          "expr": "netvantage_dns_resolution_seconds{target=~\"$target\", pop=~\"$pop\", resolver=~\"$resolver\"}",
+          "format": "table",
+          "instant": true,
+          "refId": "time"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "agent_id": true, "__name__": true, "job": true, "instance": true },
+            "renameByName": { "target": "Target", "pop": "POP", "resolver": "Resolver", "record_type": "Type" }
+          }
+        }
+      ]
+    },
+    {
+      "title": "Results Processed",
+      "description": "Rate of DNS results flowing through the Metrics Processor.",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "bars", "fillOpacity": 50 }
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(netvantage_processor_results_total{test_type=\"dns\"}[5m])",
+          "legendFormat": "{{ pop }}"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["netvantage", "dns", "synthetic-monitoring"],
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "selected": true, "text": "Prometheus", "value": "Prometheus" },
+        "hide": 0
+      },
+      {
+        "name": "target",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "query": "label_values(netvantage_dns_resolution_seconds, target)",
+        "includeAll": true,
+        "multi": true,
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "pop",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "query": "label_values(netvantage_dns_resolution_seconds, pop)",
+        "includeAll": true,
+        "multi": true,
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "resolver",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "query": "label_values(netvantage_dns_resolution_seconds, resolver)",
+        "includeAll": true,
+        "multi": true,
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "NetVantage — DNS Overview",
+  "uid": "netvantage-dns-overview",
+  "version": 1
+}

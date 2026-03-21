@@ -19,6 +19,7 @@ import (
 
 	"github.com/netvantage/netvantage/internal/agent"
 	"github.com/netvantage/netvantage/internal/agent/buffer"
+	dnsCanary "github.com/netvantage/netvantage/internal/agent/canary/dns"
 	"github.com/netvantage/netvantage/internal/agent/canary/ping"
 	"github.com/netvantage/netvantage/internal/agent/config"
 	natsTransport "github.com/netvantage/netvantage/internal/transport/nats"
@@ -57,8 +58,7 @@ func main() {
 
 	// Register canary types.
 	a.RegisterCanary(ping.New())
-
-	// TODO(M4): Register DNS canary.
+	a.RegisterCanary(dnsCanary.New())
 	// TODO(M6): Register HTTP canary.
 	// TODO(M7): Register traceroute canary.
 

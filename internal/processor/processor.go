@@ -43,6 +43,10 @@ type Processor struct {
 	pingPacketLoss *prometheus.GaugeVec
 	pingJitter     *prometheus.GaugeVec
 
+	// DNS metrics.
+	dnsResolutionTime *prometheus.GaugeVec
+	dnsResponseCode   *prometheus.GaugeVec
+
 	// General metrics.
 	resultsProcessed *prometheus.CounterVec
 	processingErrors *prometheus.CounterVec
@@ -77,6 +81,16 @@ func New(consumer transport.Consumer, logger *slog.Logger) *Processor {
 			Help: "Ping jitter (mean absolute RTT deviation) in seconds",
 		}, []string{"target", "pop", "agent_id"}),
 
+		dnsResolutionTime: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "netvantage_dns_resolution_seconds",
+			Help: "DNS resolution time in seconds",
+		}, []string{"target", "pop", "agent_id", "resolver", "record_type"}),
+
+		dnsResponseCode: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "netvantage_dns_response_code",
+			Help: "DNS response code (1=this code observed, use label to identify code)",
+		}, []string{"target", "pop", "agent_id", "resolver", "response_code"}),
+
 		resultsProcessed: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "netvantage_processor_results_total",
 			Help: "Total test results processed",
@@ -91,6 +105,8 @@ func New(consumer transport.Consumer, logger *slog.Logger) *Processor {
 	reg.MustRegister(p.pingRTT)
 	reg.MustRegister(p.pingPacketLoss)
 	reg.MustRegister(p.pingJitter)
+	reg.MustRegister(p.dnsResolutionTime)
+	reg.MustRegister(p.dnsResponseCode)
 	reg.MustRegister(p.resultsProcessed)
 	reg.MustRegister(p.processingErrors)
 
@@ -128,7 +144,12 @@ func (p *Processor) Run(ctx context.Context, metricsAddr string) error {
 		errCh <- p.consumer.Subscribe(ctx, "netvantage.ping.results", p.handlePingResult)
 	}()
 
-	// TODO(M4): Subscribe to netvantage.dns.results
+	go func() {
+		if err := p.consumer.Subscribe(ctx, "netvantage.dns.results", p.handleDNSResult); err != nil {
+			p.logger.Error("dns subscription error", "error", err)
+		}
+	}()
+
 	// TODO(M6): Subscribe to netvantage.http.results
 	// TODO(M7): Subscribe to netvantage.traceroute.results
 
@@ -186,6 +207,42 @@ func (p *Processor) handlePingResult(_ context.Context, msg []byte) error {
 	return nil
 }
 
+// handleDNSResult processes a single DNS test result from the transport.
+func (p *Processor) handleDNSResult(_ context.Context, msg []byte) error {
+	var result canary.Result
+	if err := json.Unmarshal(msg, &result); err != nil {
+		p.processingErrors.WithLabelValues("dns", "unmarshal").Inc()
+		p.logger.Error("failed to unmarshal dns result", "error", err)
+		return nil
+	}
+
+	p.resultsProcessed.WithLabelValues("dns", result.POPName).Inc()
+
+	var metrics dnsMetrics
+	if err := json.Unmarshal(result.Metrics, &metrics); err != nil {
+		p.processingErrors.WithLabelValues("dns", "metrics_unmarshal").Inc()
+		p.logger.Error("failed to unmarshal dns metrics", "error", err, "test_id", result.TestID)
+		return nil
+	}
+
+	for _, rr := range metrics.Resolvers {
+		labels := []string{result.Target, result.POPName, result.AgentID, rr.Resolver, metrics.RecordType}
+		p.dnsResolutionTime.WithLabelValues(labels...).Set(rr.ResolutionTimeMS / 1000.0)
+
+		codeLabels := []string{result.Target, result.POPName, result.AgentID, rr.Resolver, rr.ResponseCode}
+		p.dnsResponseCode.WithLabelValues(codeLabels...).Set(1)
+	}
+
+	p.logger.Debug("processed dns result",
+		"target", result.Target,
+		"pop", result.POPName,
+		"record_type", metrics.RecordType,
+		"avg_resolution_ms", fmt.Sprintf("%.2f", metrics.AvgResolutionTimeMS),
+	)
+
+	return nil
+}
+
 // pingMetrics mirrors the Metrics struct from the ping canary package.
 // Defined here to avoid an import dependency from processor → agent.
 type pingMetrics struct {
@@ -197,4 +254,20 @@ type pingMetrics struct {
 	Jitter      float64 `json:"jitter_ms"`
 	PacketsSent int     `json:"packets_sent"`
 	PacketsRecv int     `json:"packets_recv"`
+}
+
+// dnsMetrics mirrors the Metrics struct from the dns canary package.
+type dnsMetrics struct {
+	RecordType          string              `json:"record_type"`
+	AvgResolutionTimeMS float64             `json:"avg_resolution_time_ms"`
+	Resolvers           []dnsResolverResult `json:"resolvers"`
+}
+
+type dnsResolverResult struct {
+	Resolver         string   `json:"resolver"`
+	ResolutionTimeMS float64  `json:"resolution_time_ms"`
+	ResponseCode     string   `json:"response_code"`
+	ResolvedValues   []string `json:"resolved_values"`
+	Success          bool     `json:"success"`
+	Error            string   `json:"error,omitempty"`
 }

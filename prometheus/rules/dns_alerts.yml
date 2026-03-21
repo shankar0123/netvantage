@@ -1,0 +1,42 @@
+# DNS Alert Rules for NetVantage
+#
+# DNS failures are often the first indicator of infrastructure problems.
+# These rules catch resolution failures, slow resolvers, and content
+# validation mismatches (e.g., DNS poisoning or stale records).
+
+groups:
+  - name: netvantage_dns
+    rules:
+      # ALT-02: DNS Resolution Failure
+      # Fires when DNS response code is not NOERROR (NXDOMAIN, SERVFAIL, etc.).
+      - alert: NetVantageDNSResolutionFailure
+        expr: netvantage_dns_response_code{response_code!="NOERROR"} == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DNS resolution failure for {{ $labels.target }} via {{ $labels.resolver }}"
+          description: "DNS query for {{ $labels.target }} from POP {{ $labels.pop }} via resolver {{ $labels.resolver }} returned {{ $labels.response_code }}."
+
+      # Slow DNS Resolution
+      # Fires when resolution takes more than 500ms — a sign of resolver
+      # overload, network issues, or misconfigured upstream forwarders.
+      - alert: NetVantageDNSSlowResolution
+        expr: netvantage_dns_resolution_seconds > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Slow DNS resolution for {{ $labels.target }} via {{ $labels.resolver }}"
+          description: "DNS resolution for {{ $labels.target }} from POP {{ $labels.pop }} via {{ $labels.resolver }} is taking {{ $value | humanizeDuration }}. Threshold: 500ms."
+
+      # Critical DNS Resolution Time
+      # Fires when resolution exceeds 2 seconds.
+      - alert: NetVantageDNSCriticalResolution
+        expr: netvantage_dns_resolution_seconds > 2
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical DNS latency for {{ $labels.target }} via {{ $labels.resolver }}"
+          description: "DNS resolution for {{ $labels.target }} from POP {{ $labels.pop }} via {{ $labels.resolver }} is taking {{ $value | humanizeDuration }}. Threshold: 2s."
