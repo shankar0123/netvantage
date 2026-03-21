@@ -68,8 +68,141 @@ task build-agent && task build-server && task build-processor
 | Prometheus | http://localhost:9090 | — |
 | NATS Monitoring | http://localhost:8222 | — |
 | Alertmanager | http://localhost:9093 | — |
+| Control Plane API | http://localhost:8080 | API key (Bearer token) |
 
 See the [Guided Demo](docs/quickstart.md) for a full walkthrough with explanations at every step.
+
+## Control Plane API
+
+The control plane is a Go REST API (`net/http` + chi router) backed by PostgreSQL. All `/api/v1/` endpoints require a Bearer token (API key). The server runs on `:8080` by default, configurable via `NETVANTAGE_SERVER_ADDR`.
+
+### Authentication
+
+Every request to `/api/v1/*` must include an `Authorization: Bearer <api-key>` header. Keys are SHA-256 hashed at rest and support role-based access (`admin`, `agent`) with optional expiry. The healthcheck at `/healthz` is unauthenticated.
+
+### Agents
+
+Agents self-register with the control plane, send periodic heartbeats, and pull their test assignments via config sync.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/v1/agents` | Register a new agent. Body: `{"id", "pop_name", "version", "capabilities"}` |
+| `GET` | `/api/v1/agents` | List all registered agents |
+| `GET` | `/api/v1/agents/{id}` | Get a single agent by ID |
+| `DELETE` | `/api/v1/agents/{id}` | Deregister an agent |
+| `POST` | `/api/v1/agents/{id}/heartbeat` | Agent liveness signal. Body: `{"version", "status", "active_tests"}` |
+| `GET` | `/api/v1/agents/{id}/config?pop=<name>` | Config sync — returns enabled tests assigned to the agent's POP |
+
+### Points of Presence (POPs)
+
+POPs are logical locations where agents run. Every agent must reference an existing POP at registration time.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/v1/pops` | Create a POP. Body: `{"name", "provider", "city", "country", "latitude", "longitude"}` |
+| `GET` | `/api/v1/pops` | List all POPs |
+| `GET` | `/api/v1/pops/{name}` | Get a single POP |
+| `DELETE` | `/api/v1/pops/{name}` | Remove a POP |
+
+### Test Definitions
+
+Test definitions describe *what* to monitor. They are created centrally and assigned to POPs — agents pull their assignments via config sync.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/v1/tests` | Create a test. Body: `{"id", "name", "test_type", "target", "interval_ms", "timeout_ms", "config", "pops"}` |
+| `GET` | `/api/v1/tests` | List all test definitions |
+| `GET` | `/api/v1/tests/{id}` | Get a single test definition |
+| `PUT` | `/api/v1/tests/{id}` | Update a test (partial update — only send fields you want to change) |
+| `DELETE` | `/api/v1/tests/{id}` | Delete a test definition (cascades to assignments) |
+| `POST` | `/api/v1/tests/{id}/assign` | Assign a test to POPs. Body: `{"pops": ["us-east-1-aws", "eu-west-1-aws"]}` |
+
+Valid `test_type` values: `ping`, `dns`, `http`, `traceroute`. Omitting `pops` on creation assigns the test globally (runs on all POPs).
+
+### Rate Limiting
+
+All endpoints are rate-limited per IP at 100 requests/second with a burst of 200. Exceeding the limit returns `429 Too Many Requests` with a `Retry-After` header.
+
+### Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `NETVANTAGE_SERVER_ADDR` | `:8080` | Server listen address |
+| `NETVANTAGE_DB_URL` | `postgres://netvantage:netvantage-dev@localhost:5432/netvantage?sslmode=disable` | PostgreSQL connection string |
+| `NETVANTAGE_JWT_SECRET` | `dev-secret-change-in-production` | Secret for future JWT signing |
+
+## Canary Types
+
+Each canary type is compiled into the agent binary and implements the `Canary` interface. Results are published to NATS JetStream, consumed by the Metrics Processor, and written to Prometheus.
+
+### Ping (ICMP)
+
+Measures round-trip time, packet loss, and jitter to any IP or hostname. Uses [pro-bing](https://github.com/prometheus-community/pro-bing) for ICMP — supports both privileged raw sockets and unprivileged UDP mode.
+
+**Prometheus metrics:** `netvantage_ping_rtt_seconds{target, pop}`, `netvantage_ping_packet_loss_ratio`, `netvantage_ping_jitter_seconds`
+
+**Config options:** `count` (packets per run, default 5), `interval` (between packets, default 200ms), `payload_size` (bytes, default 56), `privileged` (raw socket, default true)
+
+### DNS
+
+Resolves records against multiple resolvers simultaneously and compares results. Supports A, AAAA, CNAME, MX, NS, TXT, and SRV record types. Content validation asserts that resolved values match expected values.
+
+**Prometheus metrics:** `netvantage_dns_resolution_seconds{target, pop, resolver}`, `netvantage_dns_response_code{target, pop, resolver}`
+
+**Config options:** `record_type` (default A), `resolvers` (list of resolver IPs, default system resolver), `expected_values` (optional content assertion)
+
+### HTTP/S (M6, planned)
+
+Full HTTP timing breakdown (DNS/TCP/TLS/TTFB/total), status code assertion, content matching (string/regex/JSONPath), TLS certificate validation and expiry monitoring, redirect chain tracking.
+
+### Traceroute (M7, planned)
+
+Hop-by-hop network path mapping via `mtr` (default) or `scamper`. Per-hop metrics include IP, RTT, packet loss, ASN (Team Cymru), geolocation (MaxMind GeoLite2), and reverse DNS. Path change detection between consecutive runs.
+
+## Grafana Dashboards
+
+All dashboards are provisioned as code from `grafana/dashboards/` — no manual creation. They auto-load when the stack starts.
+
+| Dashboard | File | Description |
+|---|---|---|
+| Home | `home.json` | Landing page with links to all dashboards |
+| BGP Event Timeline | `bgp-events.json` | Chronological BGP events, filterable by prefix/origin AS/severity/RPKI status |
+| Ping Overview | `ping-overview.json` | RTT heatmap, packet loss time series, jitter trends, per-target status |
+| DNS Overview | `dns-overview.json` | Resolution time histograms, response code distribution, resolver comparison |
+| Platform Health | `platform-health.json` | Agent heartbeats, NATS consumer lag, processing rates, API latency |
+
+## Alerting
+
+Prometheus alert rules live in `prometheus/rules/` and route through Alertmanager to Slack, PagerDuty, email, or webhooks.
+
+| Alert | Severity | Condition |
+|---|---|---|
+| `NetVantagePingHighLatency` | warning | RTT > 200ms for 5m |
+| `NetVantagePingCriticalLatency` | critical | RTT > 500ms for 2m |
+| `NetVantagePingTargetUnreachable` | critical | 100% packet loss for 2m |
+| `NetVantagePingHighPacketLoss` | warning | > 20% loss for 5m |
+| `NetVantagePingHighJitter` | warning | Jitter > 50ms for 5m |
+| `NetVantageAgentDown` | critical | No results from agent for 5m |
+| `NetVantageDNSResolutionFailure` | warning | Non-NOERROR response for 2m |
+| `NetVantageDNSSlowResolution` | warning | Resolution > 500ms for 5m |
+| `NetVantageDNSCriticalResolution` | critical | Resolution > 2s for 2m |
+| `NetVantageBGPHijackDetected` | critical | Unexpected origin AS for monitored prefix |
+| `NetVantageBGPPrefixWithdrawal` | warning | Monitored prefix withdrawn |
+| `NetVantageBGPAnalyzerStale` | warning | No BGP updates for 10m |
+| `NetVantageProcessorDown` | critical | Metrics Processor unreachable for 2m |
+| `NetVantageHighProcessingErrorRate` | warning | Error rate > 0.1/s for 5m |
+
+## Database
+
+PostgreSQL schema is managed via numbered migration files in `migrations/`. The initial schema (`001_initial_schema.sql`) creates tables for POPs, agents, test definitions, test assignments, and API keys — all with indexes, foreign key constraints, and auto-updating `updated_at` triggers.
+
+Run migrations against your database:
+
+```bash
+psql $NETVANTAGE_DB_URL -f migrations/001_initial_schema.sql
+```
+
+Migrations are idempotent (`IF NOT EXISTS`, `ON CONFLICT`) and safe to re-run.
 
 ## Project Status
 
@@ -81,8 +214,8 @@ NetVantage is in active early development. The BGP analyzer — our primary comp
 | M2: BGP Analysis | ✅ Complete | Hijack detection, RPKI validation, BGP dashboards |
 | M3: Ping Canary | ✅ Complete | First canary type, end-to-end pipeline proof |
 | M4: DNS Canary | ✅ Complete | DNS monitoring with resolver comparison |
-| M5: Control Plane | 🔜 Next | Centralized agent management API |
-| M6: HTTP/S Canary | Planned | Web monitoring with TLS validation |
+| M5: Control Plane | ✅ Complete | Centralized agent management API |
+| M6: HTTP/S Canary | 🔜 Next | Web monitoring with TLS validation |
 | M7: Traceroute | Planned | Hop-by-hop path mapping |
 | M8: BGP+Traceroute | Planned | AS path correlation engine |
 | M9: Hardening | Planned | Kafka backend, Protobuf, Helm, security |
@@ -102,13 +235,36 @@ NetVantage is in active early development. The BGP analyzer — our primary comp
 
 | Component | Technology |
 |---|---|
-| Agent & Control Plane | Go 1.22+ |
-| BGP Analyzer | Python 3.12 (pybgpstream) |
+| Agent & Control Plane | Go 1.22+ (`net/http`, chi, pgx) |
+| BGP Analyzer | Python 3.12 (pybgpstream, structlog) |
 | Message Transport | NATS JetStream (default) · Kafka (production) |
 | Metrics & Visualization | Prometheus + Grafana |
 | RPKI Validation | Routinator |
-| Database | PostgreSQL |
+| Database | PostgreSQL 16 |
 | CI/CD | GitHub Actions |
+
+## Project Layout
+
+```
+cmd/
+  agent/          # Canary agent entry point
+  server/         # Control plane API entry point
+  processor/      # Metrics processor entry point
+internal/
+  agent/          # Agent lifecycle, config, buffer
+    canary/       # Canary interface + implementations (ping, dns, ...)
+  server/         # Control plane (handlers, middleware, repos, router)
+  transport/      # Transport abstraction (NATS, Kafka, memory)
+  processor/      # Result consumption + Prometheus write
+  domain/         # Shared domain models and errors
+bgp-analyzer/     # Python BGP analysis service (independent lifecycle)
+migrations/       # PostgreSQL schema migrations
+grafana/          # Dashboard JSON + provisioning config
+prometheus/       # Scrape config + alert rules
+alertmanager/     # Alert routing config
+deploy/           # Helm charts, Terraform modules, Ansible playbooks
+docs/             # All documentation
+```
 
 ## License
 
