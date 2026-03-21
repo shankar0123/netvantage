@@ -266,6 +266,93 @@ deploy/           # Helm charts, Terraform modules, Ansible playbooks
 docs/             # All documentation
 ```
 
+## Roadmap
+
+### V1: Ship a Functional Platform
+
+Every canary type ships with its corresponding Grafana dashboard, Prometheus alert rules, and documentation — no feature ships without observability. The BGP analyzer ships first because it's the primary competitive differentiator and has zero dependency on the Go agent pipeline.
+
+#### M1: Project Scaffolding & Dev Environment ✅
+
+Go module structure (`cmd/agent/`, `cmd/server/`, `cmd/processor/`, `internal/`), Python project (`bgp-analyzer/`), transport abstraction (`Publisher`/`Consumer` interfaces) with NATS JetStream and in-memory implementations, Docker Compose dev stack (NATS, Prometheus, Grafana, PostgreSQL, Alertmanager, Routinator), CI pipeline (GitHub Actions for Go and Python), agent lifecycle skeleton (startup → registration → config sync → execution loop → heartbeat → graceful shutdown), canary interface, local result buffer for transport-down resilience, config caching for offline agent operation, Taskfile with all dev workflow targets, BSL 1.1 license file.
+
+#### M2: BGP Analysis Engine ✅
+
+The competitive differentiator — live and demo-able before any canary exists. pybgpstream integration subscribing to RouteViews/RIPE RIS, configurable IPv4/IPv6 prefix monitoring, event detection (announcements, withdrawals, AS path changes, origin AS changes), hijack detection (unexpected origin AS, MOAS conflicts, sub-prefix hijacks), RPKI Route Origin Validation via Routinator HTTP API with `valid`/`invalid`/`not-found` tagging, ROA lifecycle monitoring (expiry countdown at 30/14/7/1 day thresholds, ROA deletion/creation alerts), Prometheus metrics (`netvantage_bgp_event_total`, `netvantage_bgp_rpki_status`, `netvantage_bgp_roa_expiry_days`), BGP Event Timeline Grafana dashboard, alert rules (hijack critical, withdrawal warning, analyzer staleness, RPKI-invalid announcement, ROA expiry), Alertmanager routing for Slack + email, tests using recorded MRT data fixtures + mock Routinator responses, standalone quickstart guide.
+
+#### M3: Ping Canary ✅
+
+First canary type proving the full Go pipeline end-to-end: agent → NATS → Metrics Processor → Prometheus → Grafana. ICMP ping via pro-bing with configurable targets, packet count, interval, timeout, payload size. Prometheus metrics (`netvantage_ping_rtt_seconds`, `netvantage_ping_packet_loss_ratio`, `netvantage_ping_jitter_seconds`), Ping Overview Grafana dashboard (RTT heatmap, packet loss, jitter trends, status table), alert rules (high latency, target unreachable, agent down, high jitter), table-driven unit tests, integration test covering the full pipeline.
+
+#### M4: DNS Canary ✅
+
+DNS monitoring with cross-resolver comparison. A/AAAA/CNAME/MX/NS/TXT/SRV queries against custom resolver targets, content validation (assert expected resolved values), error classification (NXDOMAIN, SERVFAIL, TIMEOUT, REFUSED). Prometheus metrics (`netvantage_dns_resolution_seconds`, `netvantage_dns_response_code`), DNS Overview Grafana dashboard (resolution time histograms, NXDOMAIN/SERVFAIL rates, resolver comparison), alert rules (failure rates, slow/critical resolution).
+
+#### M5: Control Plane API ✅
+
+Centralized management — no more hardcoded agent configs. Go REST API with chi router, PostgreSQL-backed (pgx connection pooling, raw SQL, numbered migration files). Agent registration with POP metadata, test CRUD, test assignment to POPs/POP groups, agent config sync (pull assigned tests on interval, cache locally for offline resilience), agent heartbeat tracking, API key auth with SHA-256 hashing and role-based scopes, per-IP rate limiting, request logging, Platform Health Grafana dashboard (agent heartbeats, NATS consumer lag, API latency), OpenAPI spec planned.
+
+#### M6: HTTP/S Canary 🔜
+
+Web service monitoring with full timing breakdown. HTTP/S canary with GET/POST/HEAD, custom headers, body, auth. Timing via `httptrace.ClientTrace`: DNS/TCP/TLS/TTFB/total. Status code assertion, content matching (string/regex/JSONPath), TLS cert validation and expiry countdown, redirect chain tracking. Prometheus metrics (`netvantage_http_duration_seconds{phase}`, `netvantage_http_status_code`), HTTP Overview Grafana dashboard, alert rules for 5xx errors and TLS cert expiry at 30/14/7/1 days.
+
+#### M7: Traceroute Canary
+
+Hop-by-hop network path mapping. `mtr --json` default with `scamper` optional (Paris traceroute, MDA). Per-hop metrics: IP, RTT, packet loss, ASN (Team Cymru DNS or local MMDB), geolocation (MaxMind GeoLite2), reverse DNS. Path change detection between consecutive runs. Configurable cycle count (default 10) for statistically meaningful per-hop data. Prometheus metrics (`netvantage_traceroute_hop_rtt_seconds`, `netvantage_traceroute_path_change_total`), Traceroute Grafana dashboard with path visualization and per-hop latency heatmap.
+
+#### M8: BGP + Traceroute Correlation
+
+The feature that justifies having both BGP and traceroute in one platform. AS path reconstruction from traceroute hop ASN data, correlation engine comparing reconstructed AS path against BGP-observed AS path for the same prefix, discrepancy detection alerting when traceroute diverges from BGP announcements. Reveals route leaks, traffic engineering issues, and hijacks that neither system catches alone. Prometheus metrics (`netvantage_path_correlation_mismatch_total{prefix, pop}`), correlated path view in BGP dashboard showing BGP vs. observed paths side-by-side.
+
+#### M9: Production Hardening
+
+Kafka transport backend (SASL/SCRAM or mTLS), JSON → Protobuf migration for transport messages, Grafana OAuth2/OIDC SSO with RBAC, secrets management (Vault/K8s Secrets/SOPS), binary signing with cosign/sigstore + SBOM generation, Helm chart with persistent volumes and NetworkPolicy defaults, Prometheus/Alertmanager UIs behind authed reverse proxy, audit logging on all Control Plane mutations, POP deployment guides (AWS, GCP, Azure, bare-metal), load testing at 100+ simulated POPs.
+
+#### M10: Dashboard Suite & Release Prep
+
+Global Map Dashboard (Grafana Geomap, all POPs color-coded with click-through), Per-Target Drill-Down Dashboard (all canary types combined, multi-POP comparison, p50/p95/p99), POP Comparison Dashboard (side-by-side performance), complete documentation suite (quickstart through security hardening), all release gate criteria verified.
+
+#### v1.0.0 Release Gates
+
+All must pass before tagging v1.0.0:
+
+- BGP Analyzer detecting hijacks and routing anomalies
+- Four canary types operational end-to-end (ping, DNS, HTTP, traceroute)
+- BGP + Traceroute path correlation detecting AS path discrepancies
+- Control Plane API with auth, test CRUD, agent registration, config sync
+- 10 Grafana dashboards deployed and provisioned as code
+- Alerting suite with Alertmanager routing to Slack, PagerDuty, email, webhooks
+- NATS JetStream default; Kafka available as production backend
+- Grafana SSO, secrets management, transport encryption
+- Helm chart validated; Docker Compose for small deployments
+- Signed binaries/images, SBOM published
+- Documentation complete
+- CI/CD pipeline green (lint, test, build, sign)
+- No known critical or high-severity bugs
+- BSL 1.1 license reviewed and finalized by legal
+
+---
+
+### V2: Scale, Community & Commercial Readiness
+
+#### V2.0: BGP Analyzer v2 & Multi-Tenancy
+
+AS path change tracking with rolling window and path length anomaly detection, severity classification engine, internal BGP feeds via OpenBMP/ExaBGP for private router monitoring, RPKI advanced intelligence (ROA recommendation engine, ASPA validation, RPKI-weighted hijack confidence scoring), route leak detection via CAIDA AS-relationship data, prefix reachability scoring, multi-collector event deduplication, BGP community tracking, notification enrichment (ASN→org name via PeeringDB, dashboard deeplinks in alerts). Multi-tenancy with organization/workspace isolation and audit logging. SLA/SLO Tracking Dashboard with error budget burn rate.
+
+#### V2.1: POP Automation & Community Ecosystem
+
+One-liner agent install script with auto-registration, Terraform modules (AWS, GCP, Azure), Ansible playbooks for bare-metal deployment, canary developer SDK for community extensions, public POP program design (community-contributed vantage points).
+
+#### V2.2: Commercial Launch
+
+Commercial license purchasing flow, enterprise support subscriptions, backup/restore documentation for all stateful components.
+
+---
+
+### V3+ Future Directions
+
+AI/ML anomaly detection on metrics streams, automated root cause analysis (cross-canary cross-POP correlation), interactive network path visualization (traceroute + BGP topology overlay), agent auto-update with rolling self-update and rollback, API-first managed cloud offering, integration marketplace (Terraform provider, CLI tool, ChatOps bots), HTTP/2 + HTTP/3 (QUIC) + DoH/DoT canary support, IPv6 parity, Paris traceroute via scamper, historical BGP event store (ClickHouse) for post-incident forensics.
+
 ## License
 
 NetVantage is source-available under the [Business Source License 1.1](LICENSE). Free for non-competing production use. Converts to Apache 2.0 four years after each release.
