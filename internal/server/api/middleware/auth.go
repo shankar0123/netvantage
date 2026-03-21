@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -25,6 +26,9 @@ const (
 // APIKeyAuth creates middleware that validates API keys via Bearer token.
 // Pass allowedRoles to restrict access to specific roles (empty = any authenticated).
 func APIKeyAuth(keys repository.APIKeyRepository, logger *slog.Logger, allowedRoles ...string) func(http.Handler) http.Handler {
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
 	roleSet := make(map[string]bool, len(allowedRoles))
 	for _, r := range allowedRoles {
 		roleSet[r] = true
