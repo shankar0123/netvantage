@@ -57,13 +57,14 @@ cd netvantage
 # Start all infrastructure
 task dev-up
 
-# Build Go services
+# Build Go services (go mod tidy on first clone)
+go mod tidy
 task build-agent && task build-server && task build-processor
 ```
 
 | Service | URL | Credentials |
 |---|---|---|
-| Grafana | http://localhost:3000 | admin / admin |
+| Grafana | http://localhost:3000 | admin / netvantage |
 | Prometheus | http://localhost:9090 | — |
 | NATS Monitoring | http://localhost:8222 | — |
 | Alertmanager | http://localhost:9093 | — |
@@ -78,9 +79,9 @@ NetVantage is in active early development. The BGP analyzer — our primary comp
 |---|---|---|
 | M1: Scaffolding | ✅ Complete | Project structure, transport abstraction, dev stack |
 | M2: BGP Analysis | ✅ Complete | Hijack detection, RPKI validation, BGP dashboards |
-| M3: Ping Canary | 🔜 Next | First canary type, end-to-end pipeline proof |
-| M4: DNS Canary | Planned | DNS monitoring with resolver comparison |
-| M5: Control Plane | Planned | Centralized agent management API |
+| M3: Ping Canary | ✅ Complete | First canary type, end-to-end pipeline proof |
+| M4: DNS Canary | ✅ Complete | DNS monitoring with resolver comparison |
+| M5: Control Plane | 🔜 Next | Centralized agent management API |
 | M6: HTTP/S Canary | Planned | Web monitoring with TLS validation |
 | M7: Traceroute | Planned | Hop-by-hop path mapping |
 | M8: BGP+Traceroute | Planned | AS path correlation engine |

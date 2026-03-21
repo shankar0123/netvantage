@@ -33,18 +33,26 @@ tasks:
       - docker compose logs -f
 
   # --- Build ---
+  tidy:
+    desc: Run go mod tidy to sync dependencies
+    cmds:
+      - go mod tidy
+
   build-agent:
     desc: Build the canary agent binary
+    deps: [tidy]
     cmds:
       - go build -o {{.BIN_DIR}}/netvantage-agent ./cmd/agent/
 
   build-server:
     desc: Build the control plane server binary
+    deps: [tidy]
     cmds:
       - go build -o {{.BIN_DIR}}/netvantage-server ./cmd/server/
 
   build-processor:
     desc: Build the metrics processor binary
+    deps: [tidy]
     cmds:
       - go build -o {{.BIN_DIR}}/netvantage-processor ./cmd/processor/
 
