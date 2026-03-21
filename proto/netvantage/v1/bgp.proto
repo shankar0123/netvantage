@@ -1,0 +1,22 @@
+// BGP Path Update Schema
+//
+// Used by the Python BGP Analyzer to publish path updates via NATS to the
+// Go Metrics Processor for BGP+Traceroute path correlation (M8).
+
+syntax = "proto3";
+
+package netvantage.v1;
+
+option go_package = "github.com/netvantage/netvantage/internal/transport/pb/v1";
+
+// BGPUpdate is published by the BGP Analyzer when a BGP announcement or
+// withdrawal is observed for a monitored prefix.
+message BGPUpdate {
+  string prefix      = 1;
+  int32  origin_asn  = 2;
+  repeated int32 as_path = 3;
+  int32  peer_asn    = 4;
+  string collector   = 5;
+  string event_type  = 6;  // "announcement" or "withdrawal"
+  double timestamp   = 7;  // Unix epoch seconds.
+}

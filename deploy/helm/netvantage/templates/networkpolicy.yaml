@@ -1,0 +1,69 @@
+{{- if .Values.networkPolicy.enabled }}
+# Default deny all ingress — only allow explicitly permitted traffic.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "netvantage.fullname" . }}-default-deny
+  labels:
+    {{- include "netvantage.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: netvantage
+  policyTypes:
+    - Ingress
+---
+# Allow ingress to server from ingress controller and agents.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "netvantage.fullname" . }}-server-ingress
+  labels:
+    {{- include "netvantage.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: server
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: 8080
+          protocol: TCP
+---
+# Allow ingress to processor metrics from Prometheus.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "netvantage.fullname" . }}-processor-metrics
+  labels:
+    {{- include "netvantage.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: processor
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: 9091
+          protocol: TCP
+---
+# Allow ingress to Grafana.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "netvantage.fullname" . }}-grafana-ingress
+  labels:
+    {{- include "netvantage.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: grafana
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: 3000
+          protocol: TCP
+{{- end }}

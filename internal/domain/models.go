@@ -85,3 +85,16 @@ type APIKey struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 	LastUsed  *time.Time `json:"last_used,omitempty"`
 }
+
+// AuditEntry records a mutation performed via the control plane API.
+type AuditEntry struct {
+	ID         int64             `json:"id"`
+	Timestamp  time.Time         `json:"timestamp"`
+	ActorID    string            `json:"actor_id"`
+	ActorRole  string            `json:"actor_role"`
+	Action     string            `json:"action"`
+	Resource   string            `json:"resource"`
+	ResourceID string            `json:"resource_id"`
+	SourceIP   string            `json:"source_ip"`
+	ChangeDiff json.RawMessage   `json:"change_diff,omitempty"`
+}

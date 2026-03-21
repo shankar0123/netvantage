@@ -47,7 +47,8 @@ These are **closed**. Do not revisit unless evidence forces a change. If a decis
 - [x] **M6: HTTP/S Canary** — httptrace timing breakdown (DNS/TCP/TLS/TTFB/total), TLS cert validation, content matching, redirect tracking, HTTP Overview dashboard
 - [x] **M7: Traceroute Canary** — mtr/scamper dual backend, per-hop metrics (RTT/loss/ASN), AS path extraction, path change detection, Traceroute Overview dashboard
 - [x] **M8: BGP + Traceroute Correlation** — correlation engine comparing BGP vs traceroute AS paths, NATS bridge from Python BGP analyzer, match classification (exact/partial/mismatch), correlation panels in BGP dashboard, 3 alert rules
-- [ ] **M9: Production Hardening** — _next milestone_
+- [x] **M9: Production Hardening** — Kafka transport backend (SASL/SCRAM + mTLS via IBM/sarama), Protobuf schemas (`proto/netvantage/v1/`), Helm chart with NetworkPolicy and security contexts, audit logging middleware + PostgreSQL table + API endpoint, server config expanded (TLS, Vault, Kafka, OIDC), CI pipeline with cosign signing + SBOM + Trivy scanning, Docker Compose hardened (resource limits, env-var credentials, OIDC SSO), production deployment guide (Kubernetes, Docker Compose, AWS/GCP/Azure/bare-metal POP agents, network requirements, security checklist)
+- [ ] **M10: Dashboard Suite & Release Prep** — _next milestone_
 - [ ] M10: Dashboard Suite & Release Prep
 
 ### Pre-release Gaps (must resolve before v1.0.0)
@@ -497,24 +498,19 @@ _Finalized during M1 scaffolding. Update this section as files are created._
 
 ## Working Context
 
-**Current focus:** M9 Production Hardening.
+**Current focus:** M10 Dashboard Suite & Release Prep.
 
-**Completed:** M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M7 ✅ → M8 ✅
+**Completed:** M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M7 ✅ → M8 ✅ → M9 ✅
 
-**Immediate next steps:**
-1. Kafka transport backend: implement `Publisher`/`Consumer` interfaces for Kafka with SASL/SCRAM or mTLS (SEC-01)
-2. JSON → Protobuf migration for transport messages; schema definitions in `proto/`
-3. Grafana auth: OAuth2/OIDC SSO, disable anonymous access, RBAC (SEC-03)
-4. Secrets management: Vault/K8s Secrets/SOPS support, no plaintext secrets (SEC-07)
-5. Binary signing with cosign/sigstore, SBOM generation (SEC-06)
-6. Helm chart: all components with persistent volumes, resource limits, NetworkPolicy defaults
-7. Prometheus/Alertmanager UIs behind authed reverse proxy (SEC-05)
-8. Audit logging on all Control Plane mutations (SEC-09)
-9. POP deployment documentation: AWS, GCP, Azure, bare-metal guides (POP-01)
-10. Load testing at 100+ simulated POPs
+**Immediate next steps (M10):**
+1. Global Map Dashboard: Grafana Geomap panel, all POPs color-coded, click-through (DASH-01)
+2. Per-Target Drill-Down Dashboard: all canary types combined, multi-POP comparison, p50/p95/p99 (DASH-07)
+3. POP Comparison Dashboard: side-by-side performance across POPs (DASH-08)
+4. Documentation: API reference, canary developer guide, security hardening guide
+5. All release gate criteria verified
 
 **Milestone sequence:**
-~~M1 Scaffolding~~ → ~~M2 BGP~~ → ~~M3 Ping~~ → ~~M4 DNS~~ → ~~M5 Control Plane~~ → ~~M6 HTTP~~ → ~~M7 Traceroute~~ → ~~M8 BGP+Traceroute Correlation~~ → **M9 Hardening** → M10 Release Prep
+~~M1 Scaffolding~~ → ~~M2 BGP~~ → ~~M3 Ping~~ → ~~M4 DNS~~ → ~~M5 Control Plane~~ → ~~M6 HTTP~~ → ~~M7 Traceroute~~ → ~~M8 BGP+Traceroute Correlation~~ → ~~M9 Hardening~~ → **M10 Release Prep**
 
 **Legal blockers (must resolve before v1.0.0):**
 - BSL Additional Use Grant wording — legal sign-off needed

@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  packages: write
+  id-token: write  # Required for cosign keyless signing.
+
 jobs:
   go:
     name: Go (lint → test → build → vet)
@@ -39,6 +44,13 @@ jobs:
 
       - name: Build processor
         run: go build -o bin/netvantage-processor ./cmd/processor/
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-binaries
+          path: bin/
+          retention-days: 7
 
   python:
     name: Python BGP Analyzer (lint → test → build)
@@ -81,3 +93,153 @@ jobs:
             python3 -m json.tool "$f" > /dev/null || { echo "Invalid JSON: $f"; exit 1; }
           done
           echo "All dashboard JSON files are valid."
+
+  helm:
+    name: Validate Helm Chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      - name: Lint chart
+        run: helm lint deploy/helm/netvantage/
+
+      - name: Template chart
+        run: helm template test deploy/helm/netvantage/ > /dev/null
+
+  security:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    needs: [go]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner (filesystem)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          severity: CRITICAL,HIGH
+
+      - name: Run gosec
+        uses: securego/gosec@master
+        with:
+          args: -exclude-generated ./...
+        continue-on-error: true
+
+  # Container image build, sign, and SBOM — only on main branch pushes.
+  container:
+    name: Build, Sign & SBOM
+    runs-on: ubuntu-latest
+    needs: [go, python, dashboards, helm]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push server image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.server
+          push: true
+          tags: ghcr.io/${{ github.repository }}/netvantage-server:${{ github.sha }},ghcr.io/${{ github.repository }}/netvantage-server:latest
+          platforms: linux/amd64,linux/arm64
+
+      - name: Build and push agent image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.agent
+          push: true
+          tags: ghcr.io/${{ github.repository }}/netvantage-agent:${{ github.sha }},ghcr.io/${{ github.repository }}/netvantage-agent:latest
+          platforms: linux/amd64,linux/arm64
+
+      - name: Build and push processor image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.processor
+          push: true
+          tags: ghcr.io/${{ github.repository }}/netvantage-processor:${{ github.sha }},ghcr.io/${{ github.repository }}/netvantage-processor:latest
+          platforms: linux/amd64,linux/arm64
+
+      # Sign container images with cosign (keyless / OIDC).
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign server image
+        run: cosign sign --yes ghcr.io/${{ github.repository }}/netvantage-server:${{ github.sha }}
+
+      - name: Sign agent image
+        run: cosign sign --yes ghcr.io/${{ github.repository }}/netvantage-agent:${{ github.sha }}
+
+      - name: Sign processor image
+        run: cosign sign --yes ghcr.io/${{ github.repository }}/netvantage-processor:${{ github.sha }}
+
+      # Generate and attach SBOMs using syft.
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Generate server SBOM
+        run: |
+          syft ghcr.io/${{ github.repository }}/netvantage-server:${{ github.sha }} -o spdx-json > server-sbom.spdx.json
+          cosign attach sbom --sbom server-sbom.spdx.json ghcr.io/${{ github.repository }}/netvantage-server:${{ github.sha }}
+
+      - name: Generate agent SBOM
+        run: |
+          syft ghcr.io/${{ github.repository }}/netvantage-agent:${{ github.sha }} -o spdx-json > agent-sbom.spdx.json
+          cosign attach sbom --sbom agent-sbom.spdx.json ghcr.io/${{ github.repository }}/netvantage-agent:${{ github.sha }}
+
+      - name: Generate processor SBOM
+        run: |
+          syft ghcr.io/${{ github.repository }}/netvantage-processor:${{ github.sha }} -o spdx-json > processor-sbom.spdx.json
+          cosign attach sbom --sbom processor-sbom.spdx.json ghcr.io/${{ github.repository }}/netvantage-processor:${{ github.sha }}
+
+      - name: Upload SBOMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: sboms
+          path: "*-sbom.spdx.json"
+          retention-days: 90
+
+      # Container vulnerability scanning with Trivy.
+      - name: Scan server image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/${{ github.repository }}/netvantage-server:${{ github.sha }}
+          format: table
+          severity: CRITICAL,HIGH
+        continue-on-error: true
+
+  proto:
+    name: Validate Protobuf Schemas
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          version: "25.x"
+
+      - name: Validate proto files
+        run: |
+          for f in proto/**/*.proto; do
+            protoc --proto_path=proto -o /dev/null "$f" || { echo "Invalid proto: $f"; exit 1; }
+          done
+          echo "All proto files are valid."

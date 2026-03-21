@@ -48,3 +48,10 @@ type APIKeyRepository interface {
 	GetByHash(ctx context.Context, keyHash string) (*domain.APIKey, error)
 	TouchLastUsed(ctx context.Context, id string) error
 }
+
+// AuditRepository manages audit log persistence.
+type AuditRepository interface {
+	Record(ctx context.Context, entry *domain.AuditEntry) error
+	List(ctx context.Context, limit, offset int) ([]*domain.AuditEntry, error)
+	ListByResource(ctx context.Context, resource, resourceID string, limit int) ([]*domain.AuditEntry, error)
+}

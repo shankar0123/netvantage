@@ -1,0 +1,104 @@
+// NetVantage Transport Message Schemas
+//
+// These Protobuf definitions replace the JSON transport messages used in M1–M8.
+// They provide schema evolution, type safety, and significantly smaller wire size.
+//
+// Generation:
+//   protoc --go_out=. --go_opt=paths=source_relative proto/netvantage/v1/*.proto
+
+syntax = "proto3";
+
+package netvantage.v1;
+
+option go_package = "github.com/netvantage/netvantage/internal/transport/pb/v1";
+
+import "google/protobuf/timestamp.proto";
+
+// TestResult is the top-level envelope for all canary test results.
+// It wraps type-specific metrics in a oneof field.
+message TestResult {
+  string test_id   = 1;
+  string agent_id  = 2;
+  string pop_name  = 3;
+  string target    = 4;
+  string test_type = 5;
+  bool   success   = 6;
+  string error     = 7;
+
+  google.protobuf.Timestamp timestamp = 8;
+
+  oneof metrics {
+    PingMetrics       ping       = 10;
+    DNSMetrics        dns        = 11;
+    HTTPMetrics       http       = 12;
+    TracerouteMetrics traceroute = 13;
+  }
+}
+
+// PingMetrics contains ICMP ping test results.
+message PingMetrics {
+  double rtt_min_ms     = 1;
+  double rtt_avg_ms     = 2;
+  double rtt_max_ms     = 3;
+  double rtt_stddev_ms  = 4;
+  double packet_loss    = 5;  // 0.0–1.0
+  double jitter_ms      = 6;
+  int32  packets_sent   = 7;
+  int32  packets_recv   = 8;
+}
+
+// DNSMetrics contains DNS resolution test results.
+message DNSMetrics {
+  string record_type             = 1;
+  double avg_resolution_time_ms  = 2;
+  repeated DNSResolverResult resolvers = 3;
+}
+
+message DNSResolverResult {
+  string resolver          = 1;
+  double resolution_time_ms = 2;
+  string response_code     = 3;
+  repeated string resolved_values = 4;
+  bool   success           = 5;
+  string error             = 6;
+}
+
+// HTTPMetrics contains HTTP/S test results with timing breakdown.
+message HTTPMetrics {
+  double dns_ms          = 1;
+  double tcp_ms          = 2;
+  double tls_ms          = 3;
+  double ttfb_ms         = 4;
+  double total_ms        = 5;
+  double transfer_ms     = 6;
+  int32  status_code     = 7;
+  int64  content_length  = 8;
+  double cert_expiry_days = 9;
+  int32  redirect_count  = 10;
+  bool   content_matched = 11;
+}
+
+// TracerouteMetrics contains traceroute test results.
+message TracerouteMetrics {
+  string backend        = 1;
+  repeated Hop hops     = 2;
+  int32  hop_count      = 3;
+  bool   reached_target = 4;
+  repeated int32 as_path = 5;
+  double total_ms       = 6;
+}
+
+message Hop {
+  int32  hop_number      = 1;
+  string ip              = 2;
+  string hostname        = 3;
+  int32  asn             = 4;
+  string as_name         = 5;
+  double rtt_min_ms      = 6;
+  double rtt_avg_ms      = 7;
+  double rtt_max_ms      = 8;
+  double rtt_stddev_ms   = 9;
+  double packet_loss     = 10;
+  int32  sent            = 11;
+  int32  received        = 12;
+}

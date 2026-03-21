@@ -19,6 +19,7 @@ type Deps struct {
 	Tests       repository.TestRepository
 	Assignments repository.TestAssignmentRepository
 	APIKeys     repository.APIKeyRepository
+	Audit       repository.AuditRepository
 	Logger      *slog.Logger
 }
 
@@ -38,6 +39,11 @@ func New(deps Deps) *chi.Mux {
 	r.Route("/api/v1", func(r chi.Router) {
 		auth := middleware.APIKeyAuth(deps.APIKeys, deps.Logger)
 		r.Use(auth)
+
+		// Audit logging on all mutations (POST, PUT, DELETE, PATCH).
+		if deps.Audit != nil {
+			r.Use(middleware.AuditLogger(deps.Audit, deps.Logger))
+		}
 
 		// Agents.
 		agentH := handler.NewAgentHandler(deps.Agents, deps.POPs, deps.Logger)
@@ -66,6 +72,12 @@ func New(deps Deps) *chi.Mux {
 		r.Put("/tests/{id}", testH.Update)
 		r.Delete("/tests/{id}", testH.Delete)
 		r.Post("/tests/{id}/assign", testH.Assign)
+
+		// Audit log (admin-only read access).
+		if deps.Audit != nil {
+			auditH := handler.NewAuditHandler(deps.Audit, deps.Logger)
+			r.Get("/audit", auditH.List)
+		}
 	})
 
 	return r

@@ -17,8 +17,8 @@ M5  Control Plane      ✅ agent registration, test CRUD, config sync, auth
 M6  HTTP/S Canary      ✅ timing breakdown, TLS validation, content matching
 M7  Traceroute Canary  ✅ hop-by-hop path mapping, AS enrichment, path change detection
 M8  BGP+TR Correlation ✅ compare BGP-announced AS paths vs. traceroute-observed paths
-M9  Hardening          ⬜ Kafka backend, Protobuf, security, Helm, load testing ← NEXT
-M10 Release Prep       ⬜ dashboard suite, docs, release gates
+M9  Hardening          ✅ Kafka backend, Protobuf, Helm, audit logging, security, deployment docs
+M10 Release Prep       ⬜ dashboard suite, docs, release gates ← NEXT
 ```
 
 ---
@@ -177,10 +177,10 @@ All must be true:
 - [x] Control Plane API with auth, test CRUD, agent registration, config sync (M5) ✅
 - [ ] 10 Grafana dashboards deployed and provisioned as code (7 of 10 done)
 - [x] Alerting suite with Alertmanager routing to Slack, PagerDuty, email, webhooks ✅
-- [ ] NATS JetStream default transport; Kafka available as production backend (M9)
-- [ ] Grafana SSO, secrets management, transport encryption (M9)
-- [ ] Helm chart validated; Docker Compose for small deployments (M9)
-- [ ] Signed binaries/images, SBOM published (M9)
+- [x] NATS JetStream default transport; Kafka available as production backend (M9) ✅
+- [x] Grafana SSO, secrets management, transport encryption (M9) ✅
+- [x] Helm chart validated; Docker Compose for small deployments (M9) ✅
+- [x] Signed binaries/images, SBOM published (M9) ✅
 - [ ] Documentation complete: quickstart through security hardening (M10)
 - [x] CI/CD: lint, test, build pipeline green ✅
 - [ ] No known critical or high-severity bugs

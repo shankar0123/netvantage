@@ -1,0 +1,41 @@
+// Agent Configuration and Heartbeat Schemas
+//
+// These messages define the wire format for agent ↔ control plane communication
+// including heartbeats, config sync responses, and test definitions.
+
+syntax = "proto3";
+
+package netvantage.v1;
+
+option go_package = "github.com/netvantage/netvantage/internal/transport/pb/v1";
+
+import "google/protobuf/timestamp.proto";
+
+// Heartbeat is sent by agents at regular intervals to signal liveness.
+message Heartbeat {
+  string agent_id      = 1;
+  string pop_name      = 2;
+  string version       = 3;
+  string status        = 4;  // "online", "offline", "degraded"
+  int32  active_tests  = 5;
+  google.protobuf.Timestamp timestamp = 6;
+}
+
+// ConfigSyncResponse is the response from the control plane when an agent
+// requests its current test configuration.
+message ConfigSyncResponse {
+  repeated TestDefinition tests = 1;
+  string config_version         = 2;
+}
+
+// TestDefinition is a single test that an agent should execute.
+message TestDefinition {
+  string id          = 1;
+  string name        = 2;
+  string test_type   = 3;
+  string target      = 4;
+  int64  interval_ms = 5;
+  int64  timeout_ms  = 6;
+  bytes  config      = 7;  // JSON-encoded canary-specific config.
+  bool   enabled     = 8;
+}

@@ -1,0 +1,240 @@
+# NetVantage Helm Chart — Default Values
+#
+# Production deployment configuration for Kubernetes.
+# Override via --set or -f values-prod.yaml.
+
+# --- Global ---
+global:
+  imageRegistry: ghcr.io/shankar0123
+  imagePullSecrets: []
+
+# --- Control Plane Server ---
+server:
+  replicaCount: 2
+  image:
+    repository: netvantage-server
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  env:
+    NETVANTAGE_SERVER_ADDR: ":8080"
+    NETVANTAGE_AUDIT_ENABLED: "true"
+  tls:
+    enabled: false
+    secretName: netvantage-server-tls
+  # Extra env vars from secrets (for DB URL, JWT secret, etc.).
+  envFromSecrets:
+    - netvantage-secrets
+
+# --- Metrics Processor ---
+processor:
+  replicaCount: 2
+  image:
+    repository: netvantage-processor
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 9091
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# --- Canary Agent ---
+agent:
+  # DaemonSet for POP nodes, or Deployment for cloud agents.
+  kind: DaemonSet
+  image:
+    repository: netvantage-agent
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+  # Capabilities required for ICMP ping and traceroute.
+  securityContext:
+    capabilities:
+      add:
+        - NET_RAW
+
+# --- BGP Analyzer ---
+bgpAnalyzer:
+  replicaCount: 1
+  image:
+    repository: netvantage-bgp-analyzer
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# --- NATS (default transport) ---
+nats:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: nats
+    tag: 2.10-alpine
+  jetstream:
+    enabled: true
+    storage: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# --- Kafka (production transport, optional) ---
+kafka:
+  enabled: false
+  # When enabled, set brokers, SASL, and TLS via env vars in server/processor.
+  brokers: []
+  sasl:
+    enabled: false
+    mechanism: SCRAM-SHA-256
+    username: ""
+    passwordSecretName: ""
+  tls:
+    enabled: false
+    secretName: ""
+
+# --- PostgreSQL ---
+postgresql:
+  enabled: true
+  image:
+    repository: postgres
+    tag: 16-alpine
+  auth:
+    database: netvantage
+    username: netvantage
+    existingSecret: netvantage-db-secret
+    secretKeys:
+      adminPasswordKey: postgres-password
+      userPasswordKey: password
+  primary:
+    persistence:
+      size: 20Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+# --- Prometheus ---
+prometheus:
+  enabled: true
+  server:
+    retention: 30d
+    persistentVolume:
+      size: 50Gi
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+  # Reverse proxy for authentication.
+  authProxy:
+    enabled: false
+    image:
+      repository: quay.io/oauth2-proxy/oauth2-proxy
+      tag: v7.6.0
+
+# --- Grafana ---
+grafana:
+  enabled: true
+  replicas: 1
+  persistence:
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # OAuth2/OIDC SSO configuration.
+  auth:
+    oidc:
+      enabled: false
+      name: "SSO"
+      clientId: ""
+      clientSecretName: ""
+      authUrl: ""
+      tokenUrl: ""
+      apiUrl: ""
+      scopes: "openid profile email"
+    anonymous:
+      enabled: false
+
+# --- Alertmanager ---
+alertmanager:
+  enabled: true
+  persistence:
+    size: 2Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# --- Routinator (RPKI Validator) ---
+routinator:
+  enabled: true
+  persistence:
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+# --- NetworkPolicy ---
+networkPolicy:
+  enabled: true
+
+# --- Ingress ---
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: netvantage.example.com
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: server
+        - path: /
+          pathType: Prefix
+          service: grafana
+  tls: []

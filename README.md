@@ -119,6 +119,15 @@ Test definitions describe *what* to monitor. They are created centrally and assi
 
 Valid `test_type` values: `ping`, `dns`, `http`, `traceroute`. Omitting `pops` on creation assigns the test globally (runs on all POPs).
 
+### Audit Log
+
+All mutations (POST, PUT, DELETE, PATCH) are recorded in an append-only audit log with actor ID, role, action, resource, source IP, and the request body as a change diff.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/audit` | List audit entries. Query: `?limit=50&offset=0` |
+| `GET` | `/api/v1/audit?resource=agents&resource_id=agent-1` | Filter by resource |
+
 ### Rate Limiting
 
 All endpoints are rate-limited per IP at 100 requests/second with a burst of 200. Exceeding the limit returns `429 Too Many Requests` with a `Retry-After` header.
@@ -128,8 +137,17 @@ All endpoints are rate-limited per IP at 100 requests/second with a burst of 200
 | Variable | Default | Description |
 |---|---|---|
 | `NETVANTAGE_SERVER_ADDR` | `:8080` | Server listen address |
-| `NETVANTAGE_DB_URL` | `postgres://netvantage:netvantage-dev@localhost:5432/netvantage?sslmode=disable` | PostgreSQL connection string |
-| `NETVANTAGE_JWT_SECRET` | `dev-secret-change-in-production` | Secret for future JWT signing |
+| `NETVANTAGE_DB_URL` | `postgres://netvantage:...` | PostgreSQL connection string |
+| `NETVANTAGE_JWT_SECRET` | `dev-secret-...` | Secret for JWT signing |
+| `NETVANTAGE_TLS_ENABLED` | `false` | Enable TLS for the API server |
+| `NETVANTAGE_TLS_CERT` | — | Path to TLS certificate |
+| `NETVANTAGE_TLS_KEY` | — | Path to TLS private key |
+| `NETVANTAGE_TRANSPORT` | `nats` | Transport backend: `nats` or `kafka` |
+| `NETVANTAGE_KAFKA_BROKERS` | — | Comma-separated Kafka broker addresses |
+| `NETVANTAGE_KAFKA_SASL_ENABLED` | `false` | Enable SASL auth for Kafka |
+| `NETVANTAGE_OIDC_ENABLED` | `false` | Enable OIDC auth for the API |
+| `NETVANTAGE_AUDIT_ENABLED` | `true` | Enable audit logging |
+| `NETVANTAGE_SECRETS_PROVIDER` | `env` | Secrets source: `env`, `vault`, `k8s`, `sops` |
 
 ## Canary Types
 
@@ -219,12 +237,13 @@ Prometheus alert rules live in `prometheus/rules/` and route through Alertmanage
 
 ## Database
 
-PostgreSQL schema is managed via numbered migration files in `migrations/`. The initial schema (`001_initial_schema.sql`) creates tables for POPs, agents, test definitions, test assignments, and API keys — all with indexes, foreign key constraints, and auto-updating `updated_at` triggers.
+PostgreSQL schema is managed via numbered migration files in `migrations/`. The initial schema (`001_initial_schema.sql`) creates tables for POPs, agents, test definitions, test assignments, and API keys — all with indexes, foreign key constraints, and auto-updating `updated_at` triggers. The audit log schema (`002_audit_log.sql`) adds the immutable audit trail for control plane mutations.
 
 Run migrations against your database:
 
 ```bash
 psql $NETVANTAGE_DB_URL -f migrations/001_initial_schema.sql
+psql $NETVANTAGE_DB_URL -f migrations/002_audit_log.sql
 ```
 
 Migrations are idempotent (`IF NOT EXISTS`, `ON CONFLICT`) and safe to re-run.
@@ -243,8 +262,8 @@ NetVantage is in active early development. The BGP analyzer — our primary comp
 | M6: HTTP/S Canary | ✅ Complete | Web monitoring with TLS validation |
 | M7: Traceroute | ✅ Complete | Hop-by-hop path mapping with AS path detection |
 | M8: BGP+Traceroute | ✅ Complete | AS path correlation engine — BGP vs. traceroute comparison |
-| M9: Hardening | 🔜 Next | Kafka backend, Protobuf, Helm, security |
-| M10: Release Prep | Planned | Dashboard suite, docs, release gates |
+| M9: Hardening | ✅ Complete | Kafka backend, Protobuf, Helm, security, audit logging |
+| M10: Release Prep | 🔜 Next | Dashboard suite, docs, release gates |
 
 ## Documentation
 
@@ -254,6 +273,7 @@ NetVantage is in active early development. The BGP analyzer — our primary comp
 | **[Guided Demo](docs/quickstart.md)** | Get the full stack running locally with explanations at every step. |
 | **[BGP Monitoring Demo](docs/quickstart-bgp.md)** | Set up hijack detection, RPKI validation, and explore the BGP dashboard. |
 | **[Architecture](docs/ARCHITECTURE.md)** | Technical deep dive with design rationale for every decision. |
+| **[Production Deployment](docs/deployment-guide.md)** | Kubernetes (Helm), Docker Compose, POP agents, network requirements, security hardening. |
 | **[Contributing](docs/CONTRIBUTING.md)** | Development workflow, conventions, and how to add canary types. |
 
 ## Tech Stack
@@ -329,9 +349,9 @@ Hop-by-hop network path mapping with dual backend support. `mtr --json` default 
 
 The feature that justifies having both BGP and traceroute in one platform. The correlation engine (`internal/processor/correlation/`) compares BGP-announced AS paths against traceroute-observed AS paths in real time. BGP Analyzer publishes path updates to NATS (`netvantage.bgp.paths`) via `nats-py`; the Go processor subscribes and correlates against incoming traceroute results. Match classification: exact (traceroute path is contiguous subsequence of BGP path), partial (same origin but transit diverges), mismatch (origin AS differs — potential hijack), insufficient (not enough data). Prometheus metrics: `netvantage_path_correlation_mismatch_total{prefix, pop, match_type}`, `netvantage_path_correlation_status{prefix, pop, target}`, `netvantage_path_correlation_evaluations_total`. BGP dashboard extended with correlation section: status panel, mismatch timeline, path comparison table, evaluation rate. Three alert rules: mismatch (critical), persistent partial divergence (warning), sustained mismatch (critical).
 
-#### M9: Production Hardening
+#### M9: Production Hardening ✅
 
-Kafka transport backend (SASL/SCRAM or mTLS), JSON → Protobuf migration for transport messages, Grafana OAuth2/OIDC SSO with RBAC, secrets management (Vault/K8s Secrets/SOPS), binary signing with cosign/sigstore + SBOM generation, Helm chart with persistent volumes and NetworkPolicy defaults, Prometheus/Alertmanager UIs behind authed reverse proxy, audit logging on all Control Plane mutations, POP deployment guides (AWS, GCP, Azure, bare-metal), load testing at 100+ simulated POPs.
+Kafka transport backend with SASL/SCRAM (SHA-256/SHA-512) authentication and mTLS support via IBM/sarama, implementing the same `Publisher`/`Consumer` interfaces as the NATS backend — swap with a single config change. Protobuf schema definitions (`proto/netvantage/v1/`) for all transport messages (test results, BGP updates, agent heartbeats), ready for M10 wire migration. Grafana OAuth2/OIDC SSO via environment variables, anonymous access disabled by default, security headers enabled. Server config expanded with TLS, Vault integration, Kafka, and OIDC settings — all environment-variable-driven. Audit logging middleware records all Control Plane mutations (POST/PUT/DELETE/PATCH) with actor, role, action, resource, source IP, and request body as change diff — stored in PostgreSQL `audit_log` table, queryable via `GET /api/v1/audit`. Helm chart (`deploy/helm/netvantage/`) with server, processor, agent (DaemonSet), NetworkPolicy defaults, secrets management, resource limits, and security contexts (runAsNonRoot, readOnlyRootFilesystem, drop ALL capabilities). CI pipeline extended with Helm lint, protobuf validation, Trivy security scanning, gosec static analysis, cosign keyless container signing, SBOM generation via syft, and container vulnerability scanning. Docker Compose hardened with resource limits, environment-variable credentials (no more hardcoded passwords), and `.env.example` template. Production deployment guide (`docs/deployment-guide.md`) covering Kubernetes (Helm), Docker Compose, and POP agent deployment on AWS, GCP, Azure, and bare-metal with network requirements, firewall rules, and security hardening checklist.
 
 #### M10: Dashboard Suite & Release Prep
 

@@ -57,6 +57,7 @@ func main() {
 	tests := postgres.NewTestRepo(pool)
 	assignments := postgres.NewAssignmentRepo(pool)
 	apiKeys := postgres.NewAPIKeyRepo(pool)
+	audit := postgres.NewAuditRepo(pool)
 
 	// Build router.
 	r := router.New(router.Deps{
@@ -65,6 +66,7 @@ func main() {
 		Tests:       tests,
 		Assignments: assignments,
 		APIKeys:     apiKeys,
+		Audit:       audit,
 		Logger:      logger,
 	})
 

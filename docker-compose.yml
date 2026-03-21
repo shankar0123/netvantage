@@ -5,10 +5,13 @@
 #   docker compose down          # Stop all services
 #   docker compose down -v       # Stop and remove volumes (clean slate)
 #
+# For production-like settings, use:
+#   docker compose --env-file .env.production up -d
+#
 # Services:
-#   - NATS JetStream (transport, M1–M8)
+#   - NATS JetStream (transport, default)
 #   - Prometheus (metrics storage)
-#   - Grafana (dashboards)
+#   - Grafana (dashboards, with optional OAuth2/OIDC SSO)
 #   - PostgreSQL (control plane database)
 #   - Alertmanager (alert routing)
 #   - Routinator (RPKI validator for BGP analysis)
@@ -23,6 +26,14 @@ services:
       - "8222:8222"   # Monitoring/metrics
     volumes:
       - nats-data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.10"
+          memory: 64M
     restart: unless-stopped
 
   # --- Metrics & Visualization ---
@@ -40,6 +51,14 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 2G
+        reservations:
+          cpus: "0.20"
+          memory: 256M
     restart: unless-stopped
 
   grafana:
@@ -47,15 +66,41 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=netvantage
+      - GF_SECURITY_ADMIN_USER=${GF_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_ADMIN_PASSWORD:-netvantage}
       - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/home.json
+      # Disable anonymous access in production.
+      - GF_AUTH_ANONYMOUS_ENABLED=${GF_AUTH_ANONYMOUS_ENABLED:-false}
+      # OAuth2/OIDC SSO — set via .env or environment variables.
+      - GF_AUTH_GENERIC_OAUTH_ENABLED=${GF_AUTH_OIDC_ENABLED:-false}
+      - GF_AUTH_GENERIC_OAUTH_NAME=${GF_AUTH_OIDC_NAME:-SSO}
+      - GF_AUTH_GENERIC_OAUTH_CLIENT_ID=${GF_AUTH_OIDC_CLIENT_ID:-}
+      - GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET=${GF_AUTH_OIDC_CLIENT_SECRET:-}
+      - GF_AUTH_GENERIC_OAUTH_AUTH_URL=${GF_AUTH_OIDC_AUTH_URL:-}
+      - GF_AUTH_GENERIC_OAUTH_TOKEN_URL=${GF_AUTH_OIDC_TOKEN_URL:-}
+      - GF_AUTH_GENERIC_OAUTH_API_URL=${GF_AUTH_OIDC_API_URL:-}
+      - GF_AUTH_GENERIC_OAUTH_SCOPES=${GF_AUTH_OIDC_SCOPES:-openid profile email}
+      - GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH=${GF_AUTH_OIDC_ROLE_PATH:-}
+      - GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP=true
+      # Security headers.
+      - GF_SECURITY_COOKIE_SECURE=${GF_COOKIE_SECURE:-false}
+      - GF_SECURITY_STRICT_TRANSPORT_SECURITY=true
+      - GF_SECURITY_X_CONTENT_TYPE_OPTIONS=true
+      - GF_SECURITY_X_XSS_PROTECTION=true
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     depends_on:
       - prometheus
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
     restart: unless-stopped
 
   alertmanager:
@@ -68,6 +113,14 @@ services:
     volumes:
       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager-data:/alertmanager
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.05"
+          memory: 32M
     restart: unless-stopped
 
   # --- Control Plane Database ---
@@ -76,11 +129,19 @@ services:
     environment:
       POSTGRES_DB: netvantage
       POSTGRES_USER: netvantage
-      POSTGRES_PASSWORD: netvantage-dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-netvantage-dev}
     ports:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 1G
+        reservations:
+          cpus: "0.10"
+          memory: 128M
     restart: unless-stopped
 
   # --- RPKI Validator ---
@@ -92,6 +153,14 @@ services:
       - "3323:3323"   # RTR protocol (router-to-cache)
     volumes:
       - routinator-data:/home/routinator/.rpki-cache
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 1G
+        reservations:
+          cpus: "0.10"
+          memory: 128M
     restart: unless-stopped
 
 volumes:
