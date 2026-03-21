@@ -1,0 +1,47 @@
+groups:
+  - name: netvantage_traceroute
+    rules:
+      - alert: NetVantageTracerouteUnreachable
+        expr: netvantage_traceroute_reachable == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Traceroute cannot reach {{ $labels.target }}"
+          description: "Target {{ $labels.target }} from POP {{ $labels.pop }} has been unreachable via traceroute for 5 minutes."
+
+      - alert: NetVantageTracerouteUnreachableCritical
+        expr: netvantage_traceroute_reachable == 0
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Traceroute cannot reach {{ $labels.target }} (critical)"
+          description: "Target {{ $labels.target }} from POP {{ $labels.pop }} has been unreachable via traceroute for 15 minutes."
+
+      - alert: NetVantageTraceroutePathChange
+        expr: increase(netvantage_traceroute_path_change_total[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "AS path change detected for {{ $labels.target }}"
+          description: "The AS path to {{ $labels.target }} from POP {{ $labels.pop }} has changed. This may indicate a routing change, traffic engineering update, or routing anomaly."
+
+      - alert: NetVantageTracerouteHighHopLoss
+        expr: netvantage_traceroute_hop_loss_ratio > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High packet loss at hop {{ $labels.hop }} toward {{ $labels.target }}"
+          description: "Hop {{ $labels.hop }} ({{ $labels.hop_ip }}) on path to {{ $labels.target }} from POP {{ $labels.pop }} has >50% packet loss for 10 minutes."
+
+      - alert: NetVantageTracerouteHighLatencyHop
+        expr: netvantage_traceroute_hop_rtt_seconds > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High latency at hop {{ $labels.hop }} toward {{ $labels.target }}"
+          description: "Hop {{ $labels.hop }} ({{ $labels.hop_ip }}) on path to {{ $labels.target }} from POP {{ $labels.pop }} has >500ms RTT for 10 minutes."

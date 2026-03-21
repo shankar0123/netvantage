@@ -21,6 +21,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -51,6 +53,16 @@ type Processor struct {
 	httpDuration   *prometheus.GaugeVec
 	httpStatusCode *prometheus.GaugeVec
 	httpCertExpiry *prometheus.GaugeVec
+
+	// Traceroute metrics.
+	tracerouteHopRTT        *prometheus.GaugeVec
+	tracerouteHopLoss       *prometheus.GaugeVec
+	tracerouteHopCount      *prometheus.GaugeVec
+	traceroutePathChange    *prometheus.CounterVec
+	tracerouteReachable     *prometheus.GaugeVec
+
+	// Path change detection state: target@pop → last AS path hash.
+	lastASPaths map[string]string
 
 	// General metrics.
 	resultsProcessed *prometheus.CounterVec
@@ -111,6 +123,33 @@ func New(consumer transport.Consumer, logger *slog.Logger) *Processor {
 			Help: "Days until TLS certificate expires",
 		}, []string{"target", "pop", "agent_id"}),
 
+		tracerouteHopRTT: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "netvantage_traceroute_hop_rtt_seconds",
+			Help: "Traceroute per-hop round-trip time in seconds",
+		}, []string{"target", "pop", "agent_id", "hop", "hop_ip", "hop_asn"}),
+
+		tracerouteHopLoss: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "netvantage_traceroute_hop_loss_ratio",
+			Help: "Traceroute per-hop packet loss ratio (0.0–1.0)",
+		}, []string{"target", "pop", "agent_id", "hop", "hop_ip"}),
+
+		tracerouteHopCount: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "netvantage_traceroute_hop_count",
+			Help: "Number of hops to reach the target",
+		}, []string{"target", "pop", "agent_id"}),
+
+		traceroutePathChange: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "netvantage_traceroute_path_change_total",
+			Help: "Total number of AS path changes detected",
+		}, []string{"target", "pop"}),
+
+		tracerouteReachable: prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "netvantage_traceroute_reachable",
+			Help: "Whether the target was reached (1=yes, 0=no)",
+		}, []string{"target", "pop", "agent_id"}),
+
+		lastASPaths: make(map[string]string),
+
 		resultsProcessed: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "netvantage_processor_results_total",
 			Help: "Total test results processed",
@@ -130,6 +169,11 @@ func New(consumer transport.Consumer, logger *slog.Logger) *Processor {
 	reg.MustRegister(p.httpDuration)
 	reg.MustRegister(p.httpStatusCode)
 	reg.MustRegister(p.httpCertExpiry)
+	reg.MustRegister(p.tracerouteHopRTT)
+	reg.MustRegister(p.tracerouteHopLoss)
+	reg.MustRegister(p.tracerouteHopCount)
+	reg.MustRegister(p.traceroutePathChange)
+	reg.MustRegister(p.tracerouteReachable)
 	reg.MustRegister(p.resultsProcessed)
 	reg.MustRegister(p.processingErrors)
 
@@ -179,7 +223,11 @@ func (p *Processor) Run(ctx context.Context, metricsAddr string) error {
 		}
 	}()
 
-	// TODO(M7): Subscribe to netvantage.traceroute.results
+	go func() {
+		if err := p.consumer.Subscribe(ctx, "netvantage.traceroute.results", p.handleTracerouteResult); err != nil {
+			p.logger.Error("traceroute subscription error", "error", err)
+		}
+	}()
 
 	// Block until shutdown.
 	select {
@@ -357,4 +405,116 @@ type httpResultMetrics struct {
 	CertExpiryDays float64 `json:"cert_expiry_days"`
 	RedirectCount  int     `json:"redirect_count"`
 	ContentMatched bool    `json:"content_matched"`
+}
+
+// handleTracerouteResult processes a single traceroute test result from the transport.
+func (p *Processor) handleTracerouteResult(_ context.Context, msg []byte) error {
+	var result canary.Result
+	if err := json.Unmarshal(msg, &result); err != nil {
+		p.processingErrors.WithLabelValues("traceroute", "unmarshal").Inc()
+		p.logger.Error("failed to unmarshal traceroute result", "error", err)
+		return nil
+	}
+
+	p.resultsProcessed.WithLabelValues("traceroute", result.POPName).Inc()
+
+	var metrics tracerouteResultMetrics
+	if err := json.Unmarshal(result.Metrics, &metrics); err != nil {
+		p.processingErrors.WithLabelValues("traceroute", "metrics_unmarshal").Inc()
+		p.logger.Error("failed to unmarshal traceroute metrics", "error", err, "test_id", result.TestID)
+		return nil
+	}
+
+	baseLabels := []string{result.Target, result.POPName, result.AgentID}
+
+	// Hop count.
+	p.tracerouteHopCount.WithLabelValues(baseLabels...).Set(float64(metrics.HopCount))
+
+	// Reachable.
+	reachable := 0.0
+	if metrics.ReachedTarget {
+		reachable = 1.0
+	}
+	p.tracerouteReachable.WithLabelValues(baseLabels...).Set(reachable)
+
+	// Per-hop metrics.
+	for _, hop := range metrics.Hops {
+		hopNum := strconv.Itoa(hop.HopNumber)
+		hopIP := hop.IP
+		if hopIP == "" {
+			hopIP = "*"
+		}
+		hopASN := strconv.Itoa(hop.ASN)
+
+		// RTT (ms → seconds).
+		rttLabels := append(baseLabels, hopNum, hopIP, hopASN)
+		p.tracerouteHopRTT.WithLabelValues(rttLabels...).Set(hop.RTTAvg / 1000.0)
+
+		// Packet loss.
+		lossLabels := append(baseLabels, hopNum, hopIP)
+		p.tracerouteHopLoss.WithLabelValues(lossLabels...).Set(hop.PacketLoss)
+	}
+
+	// Path change detection.
+	pathKey := result.Target + "@" + result.POPName
+	currentPath := asPathString(metrics.ASPath)
+	if lastPath, ok := p.lastASPaths[pathKey]; ok {
+		if lastPath != currentPath && currentPath != "" {
+			p.traceroutePathChange.WithLabelValues(result.Target, result.POPName).Inc()
+			p.logger.Info("AS path change detected",
+				"target", result.Target,
+				"pop", result.POPName,
+				"old_path", lastPath,
+				"new_path", currentPath,
+			)
+		}
+	}
+	if currentPath != "" {
+		p.lastASPaths[pathKey] = currentPath
+	}
+
+	p.logger.Debug("processed traceroute result",
+		"target", result.Target,
+		"pop", result.POPName,
+		"hops", metrics.HopCount,
+		"reached", metrics.ReachedTarget,
+		"as_path", currentPath,
+	)
+
+	return nil
+}
+
+// asPathString converts an ASN path slice to a string for comparison.
+func asPathString(path []int) string {
+	if len(path) == 0 {
+		return ""
+	}
+	parts := make([]string, len(path))
+	for i, asn := range path {
+		parts[i] = strconv.Itoa(asn)
+	}
+	return strings.Join(parts, " ")
+}
+
+// tracerouteResultMetrics mirrors the Metrics struct from the traceroute canary package.
+type tracerouteResultMetrics struct {
+	Backend       string               `json:"backend"`
+	Hops          []tracerouteHopResult `json:"hops"`
+	HopCount      int                  `json:"hop_count"`
+	ReachedTarget bool                 `json:"reached_target"`
+	ASPath        []int                `json:"as_path"`
+	TotalMS       float64              `json:"total_ms"`
+}
+
+type tracerouteHopResult struct {
+	HopNumber  int     `json:"hop_number"`
+	IP         string  `json:"ip"`
+	Hostname   string  `json:"hostname"`
+	ASN        int     `json:"asn"`
+	RTTMin     float64 `json:"rtt_min_ms"`
+	RTTAvg     float64 `json:"rtt_avg_ms"`
+	RTTMax     float64 `json:"rtt_max_ms"`
+	PacketLoss float64 `json:"packet_loss_ratio"`
+	Sent       int     `json:"sent"`
+	Received   int     `json:"received"`
 }

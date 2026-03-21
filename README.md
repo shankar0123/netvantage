@@ -155,9 +155,9 @@ Resolves records against multiple resolvers simultaneously and compares results.
 
 Full HTTP timing breakdown (DNS/TCP/TLS/TTFB/total), status code assertion, content matching (string/regex/JSONPath), TLS certificate validation and expiry monitoring, redirect chain tracking.
 
-### Traceroute (M7, planned)
+### Traceroute
 
-Hop-by-hop network path mapping via `mtr` (default) or `scamper`. Per-hop metrics include IP, RTT, packet loss, ASN (Team Cymru), geolocation (MaxMind GeoLite2), and reverse DNS. Path change detection between consecutive runs.
+Hop-by-hop network path mapping via `mtr --json` (default) or `scamper` (Paris traceroute). Dual backend support with configurable cycles (default 10), max hops, packet size, and probe protocol (ICMP/UDP/TCP). Per-hop metrics: IP, RTT (min/avg/max/stddev), packet loss, ASN, hostname. AS path extraction for BGP correlation. Path change detection between consecutive runs alerts on routing shifts. Configurable hostname resolution and ASN lookup.
 
 ## Grafana Dashboards
 
@@ -169,6 +169,8 @@ All dashboards are provisioned as code from `grafana/dashboards/` — no manual 
 | BGP Event Timeline | `bgp-events.json` | Chronological BGP events, filterable by prefix/origin AS/severity/RPKI status |
 | Ping Overview | `ping-overview.json` | RTT heatmap, packet loss time series, jitter trends, per-target status |
 | DNS Overview | `dns-overview.json` | Resolution time histograms, response code distribution, resolver comparison |
+| HTTP Overview | `http-overview.json` | Response time breakdown, status codes, TLS cert expiry, TTFB |
+| Traceroute Overview | `traceroute-overview.json` | Per-hop latency heatmap, reachability, path changes, hop loss |
 | Platform Health | `platform-health.json` | Agent heartbeats, NATS consumer lag, processing rates, API latency |
 
 ## Alerting
@@ -189,6 +191,18 @@ Prometheus alert rules live in `prometheus/rules/` and route through Alertmanage
 | `NetVantageBGPHijackDetected` | critical | Unexpected origin AS for monitored prefix |
 | `NetVantageBGPPrefixWithdrawal` | warning | Monitored prefix withdrawn |
 | `NetVantageBGPAnalyzerStale` | warning | No BGP updates for 10m |
+| `NetVantageHTTP5xx` | critical | HTTP 5xx status for 2m |
+| `NetVantageHTTPHighLatency` | warning | HTTP total > 2s for 5m |
+| `NetVantageHTTPCriticalLatency` | critical | HTTP total > 5s for 2m |
+| `NetVantageTLSCertExpiry30d` | warning | TLS cert expires within 30 days |
+| `NetVantageTLSCertExpiry14d` | warning | TLS cert expires within 14 days |
+| `NetVantageTLSCertExpiry7d` | critical | TLS cert expires within 7 days |
+| `NetVantageTLSCertExpiry1d` | critical | TLS cert expires tomorrow |
+| `NetVantageTracerouteUnreachable` | warning | Target unreachable via traceroute for 5m |
+| `NetVantageTracerouteUnreachableCritical` | critical | Target unreachable via traceroute for 15m |
+| `NetVantageTraceroutePathChange` | warning | AS path change detected |
+| `NetVantageTracerouteHighHopLoss` | warning | > 50% loss at a hop for 10m |
+| `NetVantageTracerouteHighLatencyHop` | warning | > 500ms RTT at a hop for 10m |
 | `NetVantageProcessorDown` | critical | Metrics Processor unreachable for 2m |
 | `NetVantageHighProcessingErrorRate` | warning | Error rate > 0.1/s for 5m |
 
@@ -215,9 +229,9 @@ NetVantage is in active early development. The BGP analyzer — our primary comp
 | M3: Ping Canary | ✅ Complete | First canary type, end-to-end pipeline proof |
 | M4: DNS Canary | ✅ Complete | DNS monitoring with resolver comparison |
 | M5: Control Plane | ✅ Complete | Centralized agent management API |
-| M6: HTTP/S Canary | 🔜 Next | Web monitoring with TLS validation |
-| M7: Traceroute | Planned | Hop-by-hop path mapping |
-| M8: BGP+Traceroute | Planned | AS path correlation engine |
+| M6: HTTP/S Canary | ✅ Complete | Web monitoring with TLS validation |
+| M7: Traceroute | ✅ Complete | Hop-by-hop path mapping with AS path detection |
+| M8: BGP+Traceroute | 🔜 Next | AS path correlation engine |
 | M9: Hardening | Planned | Kafka backend, Protobuf, Helm, security |
 | M10: Release Prep | Planned | Dashboard suite, docs, release gates |
 
@@ -292,15 +306,15 @@ DNS monitoring with cross-resolver comparison. A/AAAA/CNAME/MX/NS/TXT/SRV querie
 
 Centralized management — no more hardcoded agent configs. Go REST API with chi router, PostgreSQL-backed (pgx connection pooling, raw SQL, numbered migration files). Agent registration with POP metadata, test CRUD, test assignment to POPs/POP groups, agent config sync (pull assigned tests on interval, cache locally for offline resilience), agent heartbeat tracking, API key auth with SHA-256 hashing and role-based scopes, per-IP rate limiting, request logging, Platform Health Grafana dashboard (agent heartbeats, NATS consumer lag, API latency), OpenAPI spec planned.
 
-#### M6: HTTP/S Canary 🔜
+#### M6: HTTP/S Canary ✅
 
-Web service monitoring with full timing breakdown. HTTP/S canary with GET/POST/HEAD, custom headers, body, auth. Timing via `httptrace.ClientTrace`: DNS/TCP/TLS/TTFB/total. Status code assertion, content matching (string/regex/JSONPath), TLS cert validation and expiry countdown, redirect chain tracking. Prometheus metrics (`netvantage_http_duration_seconds{phase}`, `netvantage_http_status_code`), HTTP Overview Grafana dashboard, alert rules for 5xx errors and TLS cert expiry at 30/14/7/1 days.
+Web service monitoring with full timing breakdown. HTTP/S canary with GET/POST/HEAD, custom headers, body, auth. Timing via `httptrace.ClientTrace`: DNS/TCP/TLS/TTFB/total. Status code assertion, content matching (string/regex), TLS cert validation and expiry countdown, redirect chain tracking. Prometheus metrics (`netvantage_http_duration_seconds{phase}`, `netvantage_http_status_code`), HTTP Overview Grafana dashboard, alert rules for 5xx errors and TLS cert expiry at 30/14/7/1 days.
 
-#### M7: Traceroute Canary
+#### M7: Traceroute Canary ✅
 
-Hop-by-hop network path mapping. `mtr --json` default with `scamper` optional (Paris traceroute, MDA). Per-hop metrics: IP, RTT, packet loss, ASN (Team Cymru DNS or local MMDB), geolocation (MaxMind GeoLite2), reverse DNS. Path change detection between consecutive runs. Configurable cycle count (default 10) for statistically meaningful per-hop data. Prometheus metrics (`netvantage_traceroute_hop_rtt_seconds`, `netvantage_traceroute_path_change_total`), Traceroute Grafana dashboard with path visualization and per-hop latency heatmap.
+Hop-by-hop network path mapping with dual backend support. `mtr --json` default with `scamper` optional (Paris traceroute). Per-hop metrics: IP, RTT (min/avg/max/stddev), packet loss, ASN, hostname. Path change detection between consecutive runs via AS path comparison. Configurable cycle count (default 10), max hops, packet size, probe protocol (ICMP/UDP/TCP). Prometheus metrics (`netvantage_traceroute_hop_rtt_seconds`, `netvantage_traceroute_hop_loss_ratio`, `netvantage_traceroute_hop_count`, `netvantage_traceroute_path_change_total`, `netvantage_traceroute_reachable`), Traceroute Overview Grafana dashboard with per-hop latency heatmap, reachability status, path change timeline, hop RTT/loss time series, and current path table. Alert rules for unreachable targets, AS path changes, high per-hop loss, and high per-hop latency.
 
-#### M8: BGP + Traceroute Correlation
+#### M8: BGP + Traceroute Correlation 🔜
 
 The feature that justifies having both BGP and traceroute in one platform. AS path reconstruction from traceroute hop ASN data, correlation engine comparing reconstructed AS path against BGP-observed AS path for the same prefix, discrepancy detection alerting when traceroute diverges from BGP announcements. Reveals route leaks, traffic engineering issues, and hijacks that neither system catches alone. Prometheus metrics (`netvantage_path_correlation_mismatch_total{prefix, pop}`), correlated path view in BGP dashboard showing BGP vs. observed paths side-by-side.
 

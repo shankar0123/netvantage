@@ -22,6 +22,7 @@ import (
 	dnsCanary "github.com/netvantage/netvantage/internal/agent/canary/dns"
 	httpCanary "github.com/netvantage/netvantage/internal/agent/canary/http"
 	"github.com/netvantage/netvantage/internal/agent/canary/ping"
+	trCanary "github.com/netvantage/netvantage/internal/agent/canary/traceroute"
 	"github.com/netvantage/netvantage/internal/agent/config"
 	natsTransport "github.com/netvantage/netvantage/internal/transport/nats"
 )
@@ -61,7 +62,7 @@ func main() {
 	a.RegisterCanary(ping.New())
 	a.RegisterCanary(dnsCanary.New())
 	a.RegisterCanary(httpCanary.New())
-	// TODO(M7): Register traceroute canary.
+	a.RegisterCanary(trCanary.New())
 
 	// Run with graceful shutdown on SIGINT/SIGTERM.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

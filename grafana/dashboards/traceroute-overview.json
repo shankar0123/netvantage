@@ -1,0 +1,184 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "Per-Hop Latency Heatmap",
+      "description": "Average RTT per hop over time — reveals which hops introduce latency",
+      "type": "heatmap",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "scaleDistribution": { "type": "linear" } } },
+        "overrides": []
+      },
+      "options": {
+        "calculate": false,
+        "cellGap": 1,
+        "color": { "mode": "scheme", "scheme": "Oranges" },
+        "yAxis": { "unit": "short" }
+      },
+      "targets": [
+        { "expr": "netvantage_traceroute_hop_rtt_seconds{target=~\"$target\", pop=~\"$pop\", hop_ip!=\"*\"}", "legendFormat": "hop {{ hop }} — {{ hop_ip }}" }
+      ]
+    },
+    {
+      "title": "Target Reachability",
+      "description": "Whether each target is reachable via traceroute (1=reachable, 0=unreachable)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "options": { "0": { "text": "UNREACHABLE", "color": "red" }, "1": { "text": "REACHABLE", "color": "green" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "textMode": "auto" },
+      "targets": [
+        { "expr": "netvantage_traceroute_reachable{target=~\"$target\", pop=~\"$pop\"}", "legendFormat": "{{ target }} @ {{ pop }}" }
+      ]
+    },
+    {
+      "title": "Hop Count",
+      "description": "Number of hops to reach each target",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 15 },
+              { "color": "orange", "value": 25 },
+              { "color": "red", "value": 30 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [
+        { "expr": "netvantage_traceroute_hop_count{target=~\"$target\", pop=~\"$pop\"}", "legendFormat": "{{ target }} @ {{ pop }}" }
+      ]
+    },
+    {
+      "title": "AS Path Changes",
+      "description": "Timeline of AS path changes — may indicate routing shifts or hijacks",
+      "type": "timeseries",
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "drawStyle": "bars", "fillOpacity": 80 } },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "increase(netvantage_traceroute_path_change_total{target=~\"$target\", pop=~\"$pop\"}[5m])", "legendFormat": "{{ target }} @ {{ pop }}" }
+      ]
+    },
+    {
+      "title": "Per-Hop RTT (Average)",
+      "description": "Average round-trip time at each hop — visualizes latency accumulation along the path",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "fillOpacity": 10 } },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "netvantage_traceroute_hop_rtt_seconds{target=~\"$target\", pop=~\"$pop\", hop_ip!=\"*\"}", "legendFormat": "hop {{ hop }} — {{ hop_ip }} (AS{{ hop_asn }})" }
+      ]
+    },
+    {
+      "title": "Per-Hop Packet Loss",
+      "description": "Packet loss at each hop — identifies lossy segments in the path",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": { "fillOpacity": 30 },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.05 },
+              { "color": "orange", "value": 0.2 },
+              { "color": "red", "value": 0.5 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "netvantage_traceroute_hop_loss_ratio{target=~\"$target\", pop=~\"$pop\", hop_ip!=\"*\"}", "legendFormat": "hop {{ hop }} — {{ hop_ip }}" }
+      ]
+    },
+    {
+      "title": "Current Path Table",
+      "description": "Current hop-by-hop path to each target with RTT and loss data",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true },
+      "transformations": [
+        { "id": "merge" },
+        { "id": "organize", "options": { "excludeByName": { "Time": true, "agent_id": true, "__name__": true } } }
+      ],
+      "targets": [
+        { "expr": "netvantage_traceroute_hop_rtt_seconds{target=~\"$target\", pop=~\"$pop\"}", "legendFormat": "", "format": "table", "instant": true },
+        { "expr": "netvantage_traceroute_hop_loss_ratio{target=~\"$target\", pop=~\"$pop\"}", "legendFormat": "", "format": "table", "instant": true }
+      ]
+    },
+    {
+      "title": "Results Processed",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "rate(netvantage_processor_results_total{test_type=\"traceroute\"}[5m])", "legendFormat": "{{ pop }}" }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["netvantage", "traceroute", "canary"],
+  "templating": {
+    "list": [
+      { "current": {}, "hide": 0, "name": "DS_PROMETHEUS", "type": "datasource", "query": "prometheus" },
+      { "current": {}, "hide": 0, "name": "target", "type": "query", "query": "label_values(netvantage_traceroute_hop_count, target)", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "includeAll": true, "multi": true, "allValue": ".*" },
+      { "current": {}, "hide": 0, "name": "pop", "type": "query", "query": "label_values(netvantage_traceroute_hop_count, pop)", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "includeAll": true, "multi": true, "allValue": ".*" }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "NetVantage — Traceroute Overview",
+  "uid": "netvantage-traceroute-overview"
+}
