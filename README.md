@@ -151,13 +151,21 @@ Resolves records against multiple resolvers simultaneously and compares results.
 
 **Config options:** `record_type` (default A), `resolvers` (list of resolver IPs, default system resolver), `expected_values` (optional content assertion)
 
-### HTTP/S (M6, planned)
+### HTTP/S
 
-Full HTTP timing breakdown (DNS/TCP/TLS/TTFB/total), status code assertion, content matching (string/regex/JSONPath), TLS certificate validation and expiry monitoring, redirect chain tracking.
+Full HTTP timing breakdown via `httptrace.ClientTrace` (DNS/TCP/TLS/TTFB/transfer/total), status code assertion, content matching (string and regex), TLS certificate validation and expiry monitoring, redirect chain tracking. Supports GET/POST/HEAD with custom headers and body.
+
+**Prometheus metrics:** `netvantage_http_duration_seconds{target, pop, phase}`, `netvantage_http_status_code{target, pop}`, `netvantage_http_cert_expiry_days{target, pop}`
+
+**Config options:** `method` (default GET), `headers`, `body`, `expected_status` (default 200), `content_match`, `content_regex`, `follow_redirects` (default true), `max_redirects` (default 10), `tls_skip_verify`, `validate_tls` (default true)
 
 ### Traceroute
 
 Hop-by-hop network path mapping via `mtr --json` (default) or `scamper` (Paris traceroute). Dual backend support with configurable cycles (default 10), max hops, packet size, and probe protocol (ICMP/UDP/TCP). Per-hop metrics: IP, RTT (min/avg/max/stddev), packet loss, ASN, hostname. AS path extraction for BGP correlation. Path change detection between consecutive runs alerts on routing shifts. Configurable hostname resolution and ASN lookup.
+
+**Prometheus metrics:** `netvantage_traceroute_hop_rtt_seconds{target, pop, hop, hop_ip, hop_asn}`, `netvantage_traceroute_hop_loss_ratio{target, pop, hop, hop_ip}`, `netvantage_traceroute_hop_count{target, pop}`, `netvantage_traceroute_path_change_total{target, pop}`, `netvantage_traceroute_reachable{target, pop}`
+
+**Config options:** `backend` (mtr or scamper, default mtr), `cycles` (default 10), `max_hops` (default 30), `packet_size` (default 64), `protocol` (icmp/udp/tcp, default icmp), `port`, `interval_sec` (default 0.25), `resolve_asn` (default true), `resolve_hostnames` (default true)
 
 ## Grafana Dashboards
 

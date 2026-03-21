@@ -128,7 +128,7 @@ Run the agent:
 ./bin/agent --config agent.yaml
 ```
 
-**Note:** The agent won't run any tests yet because no canary types are implemented (those come in M3–M7). It will, however, start its lifecycle: connect to NATS, begin heartbeats, and attempt config sync. This validates the full agent → NATS pipeline.
+The agent ships with all four canary types compiled in: **ping**, **DNS**, **HTTP/S**, and **traceroute**. Once it connects to the control plane and syncs its test definitions, it begins executing tests immediately. Results are published to NATS JetStream, consumed by the Metrics Processor, and written to Prometheus.
 
 ## Step 6: Verify the Data Pipeline
 
@@ -138,7 +138,7 @@ With the agent running, verify each link in the chain:
 
 2. **Prometheus scraping:** [http://localhost:9090/targets](http://localhost:9090/targets) — All targets should show "UP" with a recent last scrape time.
 
-3. **Grafana rendering:** [http://localhost:3000](http://localhost:3000) — The home dashboard should show service connectivity status. Once canaries are implemented (M3+), data will populate the monitoring dashboards.
+3. **Grafana rendering:** [http://localhost:3000](http://localhost:3000) — The home dashboard links to all monitoring dashboards: Ping Overview, DNS Overview, HTTP Overview, Traceroute Overview, BGP Event Timeline, and Platform Health. Once the agent syncs test definitions and starts executing, data populates these dashboards automatically.
 
 ## Stopping and Cleaning Up
 

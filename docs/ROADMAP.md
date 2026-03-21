@@ -1,6 +1,6 @@
 # NetVantage — V1 Roadmap
 
-**Last updated:** 2026-03-19
+**Last updated:** 2026-03-20
 **Governing principle:** Every feature ships with its Grafana dashboard, Prometheus alert rules, and documentation — or it doesn't ship.
 **Strategic sequencing:** BGP analysis is our primary competitive differentiator and ships first (M2). No other open-source or freemium tool combines distributed synthetic monitoring with BGP analysis. Our moat activates the moment BGP goes live.
 
@@ -9,16 +9,16 @@
 ## Milestone Sequence
 
 ```
-M1  Scaffolding       → repo structure, Docker Compose, CI, agent skeleton, transport abstraction
-M2  BGP Analyzer v1   → ⭐ DIFFERENTIATOR — hijack detection, routing anomalies, dashboard, alerts
-M3  Ping Canary       → first Go canary end-to-end (agent → NATS → processor → Prometheus → Grafana)
-M4  DNS Canary        → resolver comparison, content validation
-M5  Control Plane     → agent registration, test CRUD, config sync, auth
-M6  HTTP/S Canary     → timing breakdown, TLS validation, content matching
-M7  Traceroute Canary → hop-by-hop path mapping, AS enrichment, path change detection
-M8  BGP+TR Correlation→ compare BGP-announced AS paths vs. traceroute-observed paths
-M9  Hardening         → Kafka backend, Protobuf, security, Helm, load testing
-M10 Release Prep      → dashboard suite, docs, release gates
+M1  Scaffolding        ✅ repo structure, Docker Compose, CI, agent skeleton, transport abstraction
+M2  BGP Analyzer v1    ✅ ⭐ DIFFERENTIATOR — hijack detection, routing anomalies, dashboard, alerts
+M3  Ping Canary        ✅ first Go canary end-to-end (agent → NATS → processor → Prometheus → Grafana)
+M4  DNS Canary         ✅ resolver comparison, content validation
+M5  Control Plane      ✅ agent registration, test CRUD, config sync, auth
+M6  HTTP/S Canary      ✅ timing breakdown, TLS validation, content matching
+M7  Traceroute Canary  ✅ hop-by-hop path mapping, AS enrichment, path change detection
+M8  BGP+TR Correlation ⬜ compare BGP-announced AS paths vs. traceroute-observed paths ← NEXT
+M9  Hardening          ⬜ Kafka backend, Protobuf, security, Helm, load testing
+M10 Release Prep       ⬜ dashboard suite, docs, release gates
 ```
 
 ---
@@ -171,18 +171,18 @@ M10 Release Prep      → dashboard suite, docs, release gates
 
 All must be true:
 
-- [ ] BGP Analyzer v1 with RPKI validation detecting hijacks and routing anomalies (M2)
-- [ ] Four canary types operational end-to-end: ping, DNS, HTTP, traceroute (M3–M7)
+- [x] BGP Analyzer v1 with RPKI validation detecting hijacks and routing anomalies (M2) ✅
+- [x] Four canary types operational end-to-end: ping, DNS, HTTP, traceroute (M3–M7) ✅
 - [ ] BGP + Traceroute path correlation detecting AS path discrepancies (M8)
-- [ ] Control Plane API with auth, test CRUD, agent registration, config sync (M5)
-- [ ] 10 Grafana dashboards deployed and provisioned as code
-- [ ] Alerting suite with Alertmanager routing to Slack, PagerDuty, email, webhooks
+- [x] Control Plane API with auth, test CRUD, agent registration, config sync (M5) ✅
+- [ ] 10 Grafana dashboards deployed and provisioned as code (7 of 10 done)
+- [x] Alerting suite with Alertmanager routing to Slack, PagerDuty, email, webhooks ✅
 - [ ] NATS JetStream default transport; Kafka available as production backend (M9)
 - [ ] Grafana SSO, secrets management, transport encryption (M9)
 - [ ] Helm chart validated; Docker Compose for small deployments (M9)
 - [ ] Signed binaries/images, SBOM published (M9)
 - [ ] Documentation complete: quickstart through security hardening (M10)
-- [ ] CI/CD: lint, test, build, sign pipeline green
+- [x] CI/CD: lint, test, build pipeline green ✅
 - [ ] No known critical or high-severity bugs
 - [ ] BSL 1.1 license reviewed and finalized by legal
 

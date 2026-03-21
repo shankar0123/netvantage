@@ -35,14 +35,20 @@ These are **closed**. Do not revisit unless evidence forces a change. If a decis
 
 ---
 
-## Project Status (Last Updated: 2026-03-19)
+## Project Status (Last Updated: 2026-03-20)
 
 ### What's Built and Working
 
-_Nothing yet — project is in PRD/design phase._
-
-- [x] PRD v1.0.0-draft finalized
-- [ ] No code written yet
+- [x] **M1: Scaffolding** — Go module, Python project, Docker Compose dev stack, transport abstraction (NATS JetStream + memory), agent lifecycle, CI pipeline, Taskfile
+- [x] **M2: BGP Analysis Engine** — pybgpstream integration, hijack detection, RPKI validation via Routinator, BGP Event Timeline dashboard, alert rules
+- [x] **M3: Ping Canary** — ICMP ping via pro-bing, RTT/loss/jitter metrics, end-to-end pipeline proof (agent → NATS → processor → Prometheus)
+- [x] **M4: DNS Canary** — Multi-resolver DNS monitoring, content validation, DNS Overview dashboard
+- [x] **M5: Control Plane API** — REST API (chi + PostgreSQL), agent registration, test CRUD, config sync, API key auth, rate limiting, Platform Health dashboard
+- [x] **M6: HTTP/S Canary** — httptrace timing breakdown (DNS/TCP/TLS/TTFB/total), TLS cert validation, content matching, redirect tracking, HTTP Overview dashboard
+- [x] **M7: Traceroute Canary** — mtr/scamper dual backend, per-hop metrics (RTT/loss/ASN), AS path extraction, path change detection, Traceroute Overview dashboard
+- [ ] **M8: BGP + Traceroute Correlation** — _next milestone_
+- [ ] M9: Production Hardening
+- [ ] M10: Dashboard Suite & Release Prep
 
 ### Pre-release Gaps (must resolve before v1.0.0)
 
@@ -491,21 +497,22 @@ _Finalized during M1 scaffolding. Update this section as files are created._
 
 ## Working Context
 
-**Current focus:** M1 scaffolding → M2 BGP Analyzer.
+**Current focus:** M8 BGP + Traceroute Correlation.
+
+**Completed:** M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M7 ✅
 
 **Immediate next steps:**
-1. Initialize Go module and `bgp-analyzer/` Python project structure
-2. Docker Compose dev stack (NATS, Prometheus, Grafana, PostgreSQL, Alertmanager)
-3. Transport abstraction: `Publisher`/`Consumer` interfaces with NATS JetStream backend
-4. Agent lifecycle skeleton with local result buffer and config caching
-5. CI pipeline (GitHub Actions) — Go + Python jobs
-6. Taskfile with dev workflow targets
-7. **Then immediately:** BGP Analyzer v1 — pybgpstream integration, hijack detection, dashboard, alerts
+1. AS path reconstruction from traceroute hop ASN data (TR-08)
+2. Correlation engine: compare reconstructed AS path against BGP-observed AS path for same prefix
+3. Discrepancy detection: alert when traceroute AS path diverges from BGP-announced path
+4. Prometheus metrics: `netvantage_path_correlation_mismatch_total{prefix, pop}`
+5. Grafana panel addition to BGP dashboard: correlated path view showing BGP vs. observed paths side-by-side
+6. Integration tests with recorded BGP + traceroute data pairs
 
-**Milestone sequence (updated):**
-M1 Scaffolding → **M2 BGP** → M3 Ping → M4 DNS → M5 Control Plane → M6 HTTP → M7 Traceroute → M8 BGP+Traceroute Correlation → M9 Hardening → M10 Release Prep
+**Milestone sequence:**
+~~M1 Scaffolding~~ → ~~M2 BGP~~ → ~~M3 Ping~~ → ~~M4 DNS~~ → ~~M5 Control Plane~~ → ~~M6 HTTP~~ → ~~M7 Traceroute~~ → **M8 BGP+Traceroute Correlation** → M9 Hardening → M10 Release Prep
 
-**Legal blockers (do not block M1–M7, must resolve before v1.0.0):**
+**Legal blockers (must resolve before v1.0.0):**
 - BSL Additional Use Grant wording — legal sign-off needed
-- BGP data source (RouteViews/RIPE RIS) acceptable use — legal review needed (**elevated priority — BGP is now M2**)
+- BGP data source (RouteViews/RIPE RIS) acceptable use — legal review needed
 - MaxMind GeoLite2 license for commercial-adjacent BSL product
