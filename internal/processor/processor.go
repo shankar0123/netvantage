@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/netvantage/netvantage/internal/agent/canary"
@@ -54,7 +55,7 @@ func New(consumer transport.Consumer, logger *slog.Logger) *Processor {
 	}
 
 	reg := prometheus.NewRegistry()
-	reg.MustRegister(prometheus.NewGoCollector())
+	reg.MustRegister(collectors.NewGoCollector())
 
 	p := &Processor{
 		consumer: consumer,
