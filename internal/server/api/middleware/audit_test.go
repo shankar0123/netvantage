@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,8 +17,10 @@ import (
 )
 
 // --- In-memory audit repository for middleware tests ---
+// Must be goroutine-safe because AuditLogger fires Record() in a background goroutine.
 
 type memAuditRepoForMiddleware struct {
+	mu      sync.Mutex
 	entries []*domain.AuditEntry
 }
 
@@ -26,16 +29,22 @@ func newMemAuditRepoForMiddleware() *memAuditRepoForMiddleware {
 }
 
 func (r *memAuditRepoForMiddleware) Record(_ context.Context, entry *domain.AuditEntry) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	entry.ID = int64(len(r.entries) + 1)
 	r.entries = append(r.entries, entry)
 	return nil
 }
 
 func (r *memAuditRepoForMiddleware) List(_ context.Context, limit, offset int) ([]*domain.AuditEntry, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.entries, nil
 }
 
 func (r *memAuditRepoForMiddleware) ListByResource(_ context.Context, resource, resourceID string, limit int) ([]*domain.AuditEntry, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	var filtered []*domain.AuditEntry
 	for _, e := range r.entries {
 		if e.Resource == resource && e.ResourceID == resourceID {
@@ -43,6 +52,15 @@ func (r *memAuditRepoForMiddleware) ListByResource(_ context.Context, resource, 
 		}
 	}
 	return filtered, nil
+}
+
+// getEntries returns a snapshot of recorded entries (goroutine-safe).
+func (r *memAuditRepoForMiddleware) getEntries() []*domain.AuditEntry {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cp := make([]*domain.AuditEntry, len(r.entries))
+	copy(cp, r.entries)
+	return cp
 }
 
 // TestAuditLogger_IsMutation_POST verifies that POST is recognized as a mutation.
@@ -59,10 +77,10 @@ func TestAuditLogger_IsMutation_POST(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
-	// Wait a bit for async logging
-	time.Sleep(10 * time.Millisecond)
+	// Wait for async audit goroutine.
+	time.Sleep(50 * time.Millisecond)
 
-	if len(repo.entries) == 0 {
+	if len(repo.getEntries()) == 0 {
 		t.Error("POST request should be audited as a mutation")
 	}
 }
@@ -81,10 +99,9 @@ func TestAuditLogger_IsMutation_PUT(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
-	// Wait a bit for async logging
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
-	if len(repo.entries) == 0 {
+	if len(repo.getEntries()) == 0 {
 		t.Error("PUT request should be audited as a mutation")
 	}
 }
@@ -103,10 +120,9 @@ func TestAuditLogger_IsMutation_PATCH(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
-	// Wait a bit for async logging
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
-	if len(repo.entries) == 0 {
+	if len(repo.getEntries()) == 0 {
 		t.Error("PATCH request should be audited as a mutation")
 	}
 }
@@ -125,10 +141,9 @@ func TestAuditLogger_IsMutation_DELETE(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
-	// Wait a bit for async logging
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
-	if len(repo.entries) == 0 {
+	if len(repo.getEntries()) == 0 {
 		t.Error("DELETE request should be audited as a mutation")
 	}
 }
@@ -147,10 +162,9 @@ func TestAuditLogger_NotMutation_GET(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
-	// Wait a bit for async logging
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
-	if len(repo.entries) > 0 {
+	if len(repo.getEntries()) > 0 {
 		t.Error("GET request should not be audited")
 	}
 }
@@ -169,10 +183,9 @@ func TestAuditLogger_NotMutation_HEAD(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
-	// Wait a bit for async logging
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
-	if len(repo.entries) > 0 {
+	if len(repo.getEntries()) > 0 {
 		t.Error("HEAD request should not be audited")
 	}
 }
@@ -191,10 +204,9 @@ func TestAuditLogger_NotMutation_OPTIONS(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
-	// Wait a bit for async logging
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
-	if len(repo.entries) > 0 {
+	if len(repo.getEntries()) > 0 {
 		t.Error("OPTIONS request should not be audited")
 	}
 }
@@ -214,10 +226,9 @@ func TestAuditLogger_OnlySuccessful(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
-	// Wait a bit for async logging
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
-	if len(repo.entries) > 0 {
+	if len(repo.getEntries()) > 0 {
 		t.Error("failed mutation (status 400) should not be audited")
 	}
 }
@@ -241,14 +252,14 @@ func TestAuditLogger_RecordsSuccessful(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
-	// Wait a bit for async logging
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
-	if len(repo.entries) == 0 {
-		t.Error("successful mutation should be recorded")
+	entries := repo.getEntries()
+	if len(entries) == 0 {
+		t.Fatal("successful mutation should be recorded")
 	}
 
-	entry := repo.entries[0]
+	entry := entries[0]
 	if entry.ActorID != "user-123" {
 		t.Errorf("expected actor_id user-123, got %s", entry.ActorID)
 	}
@@ -275,13 +286,12 @@ func TestAuditLogger_ExtractIP_XForwardedFor(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
-	// Wait a bit for async logging
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
-	if len(repo.entries) > 0 {
-		entry := repo.entries[0]
-		if entry.SourceIP != "10.0.0.1" {
-			t.Errorf("should extract first IP from X-Forwarded-For, got %s", entry.SourceIP)
+	entries := repo.getEntries()
+	if len(entries) > 0 {
+		if entries[0].SourceIP != "10.0.0.1" {
+			t.Errorf("should extract first IP from X-Forwarded-For, got %s", entries[0].SourceIP)
 		}
 	}
 }
@@ -301,13 +311,12 @@ func TestAuditLogger_ExtractIP_XRealIP(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
-	// Wait a bit for async logging
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
-	if len(repo.entries) > 0 {
-		entry := repo.entries[0]
-		if entry.SourceIP != "10.0.0.3" {
-			t.Errorf("should extract IP from X-Real-IP, got %s", entry.SourceIP)
+	entries := repo.getEntries()
+	if len(entries) > 0 {
+		if entries[0].SourceIP != "10.0.0.3" {
+			t.Errorf("should extract IP from X-Real-IP, got %s", entries[0].SourceIP)
 		}
 	}
 }
@@ -327,14 +336,13 @@ func TestAuditLogger_ExtractIP_RemoteAddr(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
-	// Wait a bit for async logging
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
-	if len(repo.entries) > 0 {
-		entry := repo.entries[0]
+	entries := repo.getEntries()
+	if len(entries) > 0 {
 		// Should strip port
-		if entry.SourceIP != "10.0.0.4" {
-			t.Errorf("should extract and strip port from RemoteAddr, got %s", entry.SourceIP)
+		if entries[0].SourceIP != "10.0.0.4" {
+			t.Errorf("should extract and strip port from RemoteAddr, got %s", entries[0].SourceIP)
 		}
 	}
 }
@@ -372,13 +380,12 @@ func TestAuditLogger_MethodToAction(t *testing.T) {
 			w := httptest.NewRecorder()
 			handler.ServeHTTP(w, req)
 
-			// Wait a bit for async logging
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(50 * time.Millisecond)
 
-			if len(repo.entries) > 0 {
-				entry := repo.entries[0]
-				if entry.Action != tt.expectedAction {
-					t.Errorf("%s: expected action %s, got %s", tt.method, tt.expectedAction, entry.Action)
+			entries := repo.getEntries()
+			if len(entries) > 0 {
+				if entries[0].Action != tt.expectedAction {
+					t.Errorf("%s: expected action %s, got %s", tt.method, tt.expectedAction, entries[0].Action)
 				}
 			}
 		})
@@ -400,11 +407,11 @@ func TestAuditLogger_ChangeDiff(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
-	// Wait a bit for async logging
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
-	if len(repo.entries) > 0 {
-		entry := repo.entries[0]
+	entries := repo.getEntries()
+	if len(entries) > 0 {
+		entry := entries[0]
 		if len(entry.ChangeDiff) == 0 {
 			t.Error("change diff should be populated from request body")
 		}
