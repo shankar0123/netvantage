@@ -239,7 +239,7 @@ jobs:
 
       - name: Validate proto files
         run: |
-          for f in proto/**/*.proto; do
+          find proto -name '*.proto' -print0 | while IFS= read -r -d '' f; do
             protoc --proto_path=proto -o /dev/null "$f" || { echo "Invalid proto: $f"; exit 1; }
           done
           echo "All proto files are valid."

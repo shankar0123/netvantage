@@ -6,14 +6,14 @@ import (
 	"time"
 )
 
-// statusWriter wraps ResponseWriter to capture the status code.
-type statusWriter struct {
+// loggingWriter wraps ResponseWriter to capture the status code for request logging.
+type loggingWriter struct {
 	http.ResponseWriter
-	code int
+	status int
 }
 
-func (w *statusWriter) WriteHeader(code int) {
-	w.code = code
+func (w *loggingWriter) WriteHeader(code int) {
+	w.status = code
 	w.ResponseWriter.WriteHeader(code)
 }
 
@@ -22,12 +22,12 @@ func RequestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
-			sw := &statusWriter{ResponseWriter: w, code: http.StatusOK}
-			next.ServeHTTP(sw, r)
+			lw := &loggingWriter{ResponseWriter: w, status: http.StatusOK}
+			next.ServeHTTP(lw, r)
 			logger.Info("request",
 				"method", r.Method,
 				"path", r.URL.Path,
-				"status", sw.code,
+				"status", lw.status,
 				"duration_ms", time.Since(start).Milliseconds(),
 				"remote", r.RemoteAddr,
 			)
