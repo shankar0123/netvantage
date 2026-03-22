@@ -319,7 +319,7 @@ func TestAuditList_EmptyResult(t *testing.T) {
 		t.Errorf("failed to decode response: %v", err)
 	}
 
-	if entries != nil && len(entries) != 0 {
+	if len(entries) != 0 {
 		t.Errorf("expected empty result, got %d entries", len(entries))
 	}
 }
