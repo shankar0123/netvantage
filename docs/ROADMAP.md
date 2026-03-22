@@ -40,7 +40,7 @@ M10 Release Prep       ✅ dashboard suite, docs, release gates, tests
 - Canary interface (Go interface, NOT `plugin.Open`)
 - Local result buffer (disk-backed) for transport-down resilience
 - Config caching for offline agent operation
-- Taskfile: `dev-up`, `dev-down`, `build-agent`, `build-server`, `build-processor`, `build-bgp`, `test`, `test-integration`, `lint`, `dashboards-validate`
+- Taskfile: `dev-up`, `dev-down`, `build-agent`, `build-server`, `build-processor`, `build-bgp`, `test`, `test-integration`, `test-e2e`, `test-all`, `lint`, `dashboards-validate`
 - BSL 1.1 `LICENSE` file
 - `PROJECT_STATE.md` template (gitignored)
 
@@ -167,6 +167,7 @@ M10 Release Prep       ✅ dashboard suite, docs, release gates, tests
 - Canary developer guide: end-to-end walkthrough for implementing new canary types ✅
 - Security hardening guide: TLS, SSO, Vault, supply chain, 101+ item checklist ✅
 - Integration test suite: dashboard validation, alert rules, Helm chart, Protobuf, migrations ✅
+- E2E test suite: testcontainers-based pipeline tests (NATS JetStream pub/sub, PostgreSQL CRUD, full pipeline verification) ✅
 - Audit handler and middleware unit tests ✅
 - Quickstart doc fixes (Grafana password, binary name) ✅
 - All release gate criteria verified ✅

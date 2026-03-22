@@ -1040,14 +1040,21 @@ func TestContextCancellation(t *testing.T) {
 ### Running Tests
 
 ```bash
-# Run all tests in the tcpcheck package.
+# Unit tests only (fast, no Docker).
 go test ./internal/agent/canary/tcpcheck/...
 
-# Run with coverage.
+# Unit tests with coverage.
 go test -cover ./internal/agent/canary/tcpcheck/...
 
 # Run a specific test.
 go test -run TestExecute ./internal/agent/canary/tcpcheck/
+
+# E2E pipeline tests — verifies your canary through real NATS JetStream (requires Docker).
+go test -v -race -tags=e2e -timeout=10m ./tests/e2e/...
+
+# Or use the Taskfile shortcuts:
+task test       # All unit tests
+task test-e2e   # All E2E tests (testcontainers)
 ```
 
 ---
@@ -1606,16 +1613,17 @@ groups:
 - [ ] Create package: `internal/agent/canary/<type>/`
 - [ ] Implement `config.go` with `Config` struct and `Metrics` struct
 - [ ] Implement `<type>.go` with `Canary` type implementing the interface
-- [ ] Implement `<type>_test.go` with table-driven tests
+- [ ] Implement `<type>_test.go` with table-driven unit tests
 - [ ] Add processor handler in `internal/processor/processor.go`
 - [ ] Create Prometheus metrics in processor (GaugeVec, CounterVec)
 - [ ] Subscribe to results topic in `Processor.Run()`
 - [ ] Create dashboard JSON at `grafana/dashboards/canary-<type>-dashboard.json`
 - [ ] Create alert rules at `prometheus/rules/alerts-<type>.yml`
 - [ ] Register canary in `cmd/agent/main.go`
-- [ ] Run tests: `go test ./...`
+- [ ] Run unit tests: `task test`
+- [ ] **Add E2E pipeline test in `tests/e2e/pipeline_test.go`** — publish a canary result through real NATS, consume via Processor, verify metric on `/metrics` (see existing tests for pattern)
+- [ ] Run E2E tests: `task test-e2e` (requires Docker)
 - [ ] Build agent: `go build -o netvantage-agent ./cmd/agent`
-- [ ] Test end-to-end with Docker Compose stack
 - [ ] Document canary config, metrics, and usage in `docs/`
 
 ---

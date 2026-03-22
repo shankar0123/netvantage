@@ -226,6 +226,27 @@ jobs:
           severity: CRITICAL,HIGH
         continue-on-error: true
 
+  # End-to-end tests using testcontainers (real NATS, PostgreSQL, etc.)
+  e2e:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    needs: [go]  # Only run if unit tests pass.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Tidy modules
+        run: go mod tidy
+
+      - name: Run E2E tests (testcontainers)
+        run: go test -v -race -tags=e2e -timeout=10m ./tests/e2e/...
+
+      - name: Run integration tests (config validation)
+        run: go test -v -tags=integration -timeout=5m ./tests/...
+
   proto:
     name: Validate Protobuf Schemas
     runs-on: ubuntu-latest

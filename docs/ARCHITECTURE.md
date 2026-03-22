@@ -206,3 +206,19 @@ The correlation engine reconstructs an AS path from traceroute hop ASN data and 
 **Binary signing:** cosign/sigstore with SBOM generation. **Why?** Users should be able to verify that the binary they downloaded was actually built from the repo they're looking at.
 
 **Audit logging:** All control plane mutations are logged with actor, timestamp, source IP, and change diff. **Why?** When something goes wrong, you need to know who changed what and when.
+
+## Testing Architecture
+
+Three test layers, each catching different classes of bugs:
+
+**Unit tests** (`internal/**/*_test.go`, no build tag) — Fast, no Docker, no network. Table-driven tests for canary logic, `httptest` for API handlers, in-memory transport for processor tests. Run with `task test`.
+
+**E2E tests** (`tests/e2e/*_test.go`, `//go:build e2e`) — Real infrastructure via `testcontainers-go`. Each test gets a fresh NATS JetStream or PostgreSQL container — no shared state, no cleanup scripts. Tests exercise the full data pipeline: publish a canary result through real NATS, consume it via the Processor, and verify the Prometheus metric appears on `/metrics`. PostgreSQL tests run real migrations and exercise repository CRUD with actual SQL constraints and triggers. Run with `task test-e2e`.
+
+**Config validation tests** (`tests/*_test.go`, `//go:build integration`) — Validate migration SQL structure, Prometheus alert rule YAML, Grafana dashboard JSON, Helm templates, and Protobuf schemas. No containers needed — pure file validation. Run with `task test-integration`.
+
+**Why testcontainers instead of Docker Compose for E2E?** Docker Compose gives you a shared environment where test order matters and state leaks between runs. Testcontainers gives each test function a fresh, isolated container. Tests are parallel-safe, reproducible, and require no `docker compose up` before running.
+
+**Why not just unit tests?** The in-memory transport is synchronous and never fails — it can't catch NATS JetStream protocol issues (durable consumer creation, stream config, ack/nack behavior). In-memory repos don't enforce SQL constraints, triggers, or pagination. E2E tests catch the bugs that matter most in production.
+
+CI runs all three layers: unit tests first (fast feedback), then E2E (real infrastructure), then config validation. See `.github/workflows/ci.yml`.

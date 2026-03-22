@@ -24,8 +24,11 @@ go mod tidy
 task dev-up
 
 # Run all tests
-task test       # Go unit tests
-task test-bgp   # Python BGP tests
+task test              # Go unit tests (fast, no Docker)
+task test-e2e          # E2E tests with real NATS/Postgres (requires Docker)
+task test-integration  # Config validation tests
+task test-bgp          # Python BGP analyzer tests
+task test-all          # All of the above
 
 # Run linters
 task lint-go      # golangci-lint
@@ -124,7 +127,7 @@ PRs should target `main` and include a clear description of what changed and why
 
 **Error handling:** Return domain errors from services. API handlers map to HTTP status codes. Canary failures return `Result{Success: false, Error: "..."}` — never panic. **Why no panics?** A panic in one canary should not crash the agent and kill monitoring for all other canary types. The agent wraps each test execution in `defer/recover` to ensure fault isolation.
 
-**Testing:** Table-driven tests for canary logic. `httptest` for handler tests. `testcontainers-go` for integration tests against real NATS and PostgreSQL. **Why table-driven tests?** They make it trivial to add new test cases — just add a row to the table. They also make the test matrix visible at a glance.
+**Testing:** Three layers required. (1) Table-driven unit tests for canary logic + `httptest` for handlers — fast, no Docker. (2) E2E tests with `testcontainers-go` for real NATS JetStream pub/sub, full pipeline verification, and PostgreSQL repository CRUD — requires Docker, gated behind `//go:build e2e` tag. (3) Config validation tests for migrations, alert rules, dashboards, Helm, and Protobuf — gated behind `//go:build integration` tag. **Why table-driven tests?** They make it trivial to add new test cases — just add a row to the table. They also make the test matrix visible at a glance. **Why testcontainers?** The in-memory transport is great for unit tests but can't catch NATS protocol bugs, JetStream stream creation failures, or PostgreSQL constraint behavior. E2E tests with real containers catch what mocks miss.
 
 **HTTP:** stdlib `net/http` with `chi` router. No heavy frameworks. **Why not Gin, Echo, Fiber?** The Go standard library's HTTP server is production-grade. `chi` adds URL parameters and middleware without pulling in a large dependency tree. Heavy frameworks add abstraction layers that hide behavior — the opposite of what we want for a system where HTTP semantics matter.
 
@@ -180,7 +183,7 @@ type Canary interface {
 
 **5. Add alert rules** — YAML file in `prometheus/rules/`. Define what conditions are alertable. Think about severity: packet loss > 50% might be critical, while > 10% is a warning.
 
-**6. Write tests** — Table-driven unit tests for the canary logic. At least one integration test that verifies the full pipeline (agent → NATS → processor → Prometheus query).
+**6. Write tests** — Table-driven unit tests for the canary logic. At least one E2E test (`tests/e2e/`) that publishes a canary result through real NATS JetStream, consumes it via the Processor, and verifies the metric appears on the `/metrics` endpoint. See the existing pipeline tests in `tests/e2e/pipeline_test.go` for the pattern.
 
 **7. Document it** — Add a section in docs explaining what the canary measures, how to configure it, and what the dashboard shows.
 
@@ -189,15 +192,27 @@ The rule is simple: **every canary ships with its dashboard, alert rules, and do
 ## Running Tests
 
 ```bash
-task test              # Go unit tests (fast, no external deps)
-task test-integration  # Go integration tests (starts real NATS/Postgres via testcontainers)
+task test              # Go unit tests (fast, no Docker)
+task test-e2e          # E2E tests — real NATS, PostgreSQL via testcontainers (requires Docker)
+task test-integration  # Config validation tests (migrations, alert rules, dashboards, Helm, proto)
 task test-bgp          # Python BGP analyzer tests (mocked, no pybgpstream needed)
+task test-all          # All of the above
 task lint-go           # Go linting (golangci-lint)
 task lint-python       # Python linting (ruff)
 task dashboards-validate  # Validate Grafana dashboard JSON syntax
 ```
 
-**Why separate `test` and `test-integration`?** Unit tests should run in under 5 seconds with zero external dependencies. Integration tests start real containers (NATS, PostgreSQL) and take longer. Developers run unit tests constantly; integration tests run in CI and before merges.
+**Three test layers, three purposes:**
+
+| Layer | Command | Build Tag | Docker? | Speed | What it catches |
+|---|---|---|---|---|---|
+| Unit | `task test` | _(none)_ | No | <5s | Logic bugs, handler errors, serialization issues |
+| E2E | `task test-e2e` | `e2e` | Yes | ~2min | NATS protocol bugs, SQL constraint violations, pipeline integration failures |
+| Config validation | `task test-integration` | `integration` | No | <10s | Broken migration SQL, invalid alert rules, malformed dashboards |
+
+**When to run what:** Developers run `task test` constantly during development. Run `task test-e2e` before every commit to main. CI runs all three layers automatically.
+
+**Why testcontainers instead of Docker Compose for E2E?** Each test gets a fresh, isolated container — no state leaks between tests, no cleanup scripts, no port conflicts. Tests are self-contained: clone the repo, run `task test-e2e`, done.
 
 ## Questions?
 

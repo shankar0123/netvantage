@@ -6,9 +6,10 @@ You are my long-term copilot for building NetVantage — a distributed synthetic
 1. Smallest useful implementation first. Challenge scope creep relentlessly.
 2. Separate core monitoring concerns from integrations/ecosystem concerns.
 3. Every feature ships with its Grafana dashboard, Prometheus alert rules, and documentation — or it doesn't ship.
-4. Think in terms of: maintainability > extensibility > observability > operational simplicity.
-5. Be opinionated. Default to saying "no" to new abstractions until the concrete pain is felt.
-6. When in doubt, optimize for a solo developer or small team moving fast — not for hypothetical scale.
+4. **Every code commit MUST include comprehensive end-to-end and integration tests where feasible.** No untested code merges to main. See the Testing Policy section below.
+5. Think in terms of: maintainability > extensibility > observability > operational simplicity.
+6. Be opinionated. Default to saying "no" to new abstractions until the concrete pain is felt.
+7. When in doubt, optimize for a solo developer or small team moving fast — not for hypothetical scale.
 
 ---
 
@@ -149,7 +150,7 @@ _Strategic sequencing: BGP analysis is our primary competitive differentiator. I
   ```
 - Local result buffer (disk-backed) for transport-down resilience
 - Config caching for offline agent operation
-- Taskfile with targets: `dev-up`, `dev-down`, `build-agent`, `build-server`, `build-processor`, `build-bgp`, `test`, `test-integration`, `lint`, `proto`, `dashboards-validate`
+- Taskfile with targets: `dev-up`, `dev-down`, `build-agent`, `build-server`, `build-processor`, `build-bgp`, `test`, `test-integration`, `test-e2e`, `test-all`, `lint`, `proto`, `dashboards-validate`
 - BSL 1.1 `LICENSE` file with configured parameters
 - `PROJECT_STATE.md` template (gitignored)
 
@@ -423,12 +424,12 @@ _Finalized during M1 scaffolding. Update this section as files are created._
 
 ### Tests
 
-| Type | Location | Infrastructure |
-|---|---|---|
-| Unit tests | `internal/**/*_test.go` | None (mocks/memory transport) |
-| Component tests | `internal/integration/*_test.go` | testcontainers-go (real NATS/Postgres) |
-| E2E tests | `tests/e2e/` | Full Docker Compose stack |
-| BGP Analyzer tests | `bgp-analyzer/tests/` | Recorded MRT fixtures |
+| Type | Build Tag | Location | Infrastructure |
+|---|---|---|---|
+| Unit tests | _(none)_ | `internal/**/*_test.go` | None (mocks/memory transport) |
+| Config validation | `integration` | `tests/*_test.go` | None (file validation) |
+| E2E tests | `e2e` | `tests/e2e/*_test.go` | testcontainers-go (real NATS, PostgreSQL) |
+| BGP Analyzer tests | _(none)_ | `bgp-analyzer/tests/` | Recorded MRT fixtures |
 
 ---
 
@@ -446,11 +447,33 @@ _Finalized during M1 scaffolding. Update this section as files are created._
 - Transport failures trigger local buffering, not data loss
 
 ### Testing
-- Table-driven tests for all canary logic
-- Handler tests use `httptest`
-- Component tests use testcontainers-go against real NATS and PostgreSQL
-- E2E tests spin up full Docker Compose and verify metric flow to Prometheus
-- BGP Analyzer tests use recorded MRT data fixtures
+
+> **⚠️ MANDATORY: Every code commit MUST include comprehensive tests where feasible. No untested code merges to main.**
+
+**Test pyramid (all three layers required for new features):**
+
+| Layer | Build Tag | Location | Infrastructure | Run Command |
+|---|---|---|---|---|
+| Unit tests | _(none)_ | `internal/**/*_test.go` | None (mocks, memory transport) | `task test` |
+| Config validation | `integration` | `tests/*_test.go` | None (file validation) | `task test-integration` |
+| E2E tests | `e2e` | `tests/e2e/*_test.go` | Docker (testcontainers-go) | `task test-e2e` |
+| BGP Analyzer | _(none)_ | `bgp-analyzer/tests/` | Recorded MRT fixtures | `task test-bgp` |
+
+**What each layer covers:**
+
+- **Unit tests:** Table-driven tests for canary logic, handler tests via `httptest`, middleware tests, correlation engine tests. Uses in-memory transport — fast, no Docker.
+- **Config validation:** Integration-tagged tests validating migration SQL, alert rule YAML, dashboard JSON, Helm templates, Protobuf schemas. No containers needed.
+- **E2E tests (testcontainers):** Real NATS JetStream pub/sub, full pipeline (Agent → NATS → Processor → /metrics verification), PostgreSQL repository CRUD with real SQL and migrations, audit log pagination, idempotency checks. Uses `testcontainers-go` — requires Docker.
+- **BGP Analyzer:** Python `pytest` suite with recorded MRT data fixtures and mock Routinator responses.
+
+**Testing rules:**
+
+1. New canary types: MUST add unit test + pipeline E2E test through NATS
+2. New API endpoints: MUST add handler unit test + PostgreSQL integration test
+3. New transport features: MUST add NATS E2E test (not just memory transport)
+4. Schema changes: MUST add migration idempotency test + affected repo tests
+5. All Go tests run with `-race` flag
+6. CI runs all three layers: unit → E2E → integration (see `.github/workflows/ci.yml`)
 
 ### Config
 - Agent: YAML file or environment variables

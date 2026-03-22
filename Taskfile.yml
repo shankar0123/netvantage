@@ -72,9 +72,14 @@ tasks:
       - go test -v -race ./...
 
   test-integration:
-    desc: Run Go integration tests (requires Docker for testcontainers)
+    desc: Run Go config validation integration tests
     cmds:
-      - go test -v -race -tags=integration ./internal/integration/...
+      - go test -v -tags=integration -timeout=5m ./tests/...
+
+  test-e2e:
+    desc: Run E2E tests with real infrastructure (NATS, PostgreSQL via testcontainers — requires Docker)
+    cmds:
+      - go test -v -race -tags=e2e -timeout=10m ./tests/e2e/...
 
   test-bgp:
     desc: Run BGP Analyzer Python tests
@@ -84,8 +89,8 @@ tasks:
       - pytest -v
 
   test-all:
-    desc: Run all tests (Go + Python)
-    deps: [test, test-bgp]
+    desc: Run all tests (unit + integration + E2E + Python)
+    deps: [test, test-integration, test-e2e, test-bgp]
 
   # --- Lint ---
   lint:
