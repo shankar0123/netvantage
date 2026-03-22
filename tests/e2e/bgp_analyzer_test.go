@@ -2,61 +2,14 @@
 
 package e2e
 
-import (
-	"context"
-	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"testing"
-	"time"
-)
-
-// TestBGPAnalyzer_DockerBuild verifies that the BGP Analyzer Docker image
-// builds successfully. This catches dependency issues, Dockerfile errors,
-// and Python packaging problems that unit tests miss.
-func TestBGPAnalyzer_DockerBuild(t *testing.T) {
-	bgpDir := filepath.Join("..", "..", "bgp-analyzer")
-	if _, err := os.Stat(filepath.Join(bgpDir, "Dockerfile")); os.IsNotExist(err) {
-		t.Skip("bgp-analyzer/Dockerfile not found, skipping")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "docker", "build", "-t", "netvantage-bgp-analyzer:e2e-test", bgpDir)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("BGP Analyzer Docker build failed: %v", err)
-	}
-}
-
-// TestBGPAnalyzer_PythonTests runs the BGP Analyzer Python test suite inside
-// the Docker image. This verifies that the containerized Python environment
-// matches what's expected — catching missing dependencies, path issues, and
-// fixture access problems.
-func TestBGPAnalyzer_PythonTests(t *testing.T) {
-	bgpDir := filepath.Join("..", "..", "bgp-analyzer")
-	if _, err := os.Stat(filepath.Join(bgpDir, "Dockerfile")); os.IsNotExist(err) {
-		t.Skip("bgp-analyzer/Dockerfile not found, skipping")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
-
-	// Run pytest inside the container.
-	cmd := exec.CommandContext(ctx, "docker", "run", "--rm",
-		"-v", fmt.Sprintf("%s:/app", bgpDir),
-		"-w", "/app",
-		"python:3.12-slim",
-		"sh", "-c", "pip install -e '.[dev]' -q && pytest --tb=short -v",
-	)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("BGP Analyzer Python tests failed inside container: %v", err)
-	}
-}
+// BGP Analyzer E2E tests are intentionally not included here.
+//
+// The BGP Analyzer is a Python service with its own CI job (lint → test → build)
+// that runs pytest with recorded MRT fixtures and builds the Docker image.
+// Duplicating that work in the Go E2E suite adds ~2 minutes of Docker build time
+// with no additional coverage.
+//
+// If BGP Analyzer integration with the Go pipeline is needed in the future
+// (e.g., verifying Prometheus metrics written by the analyzer), add tests here
+// that use testcontainers to spin up both the BGP Analyzer container and a
+// Prometheus instance.

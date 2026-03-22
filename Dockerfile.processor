@@ -1,0 +1,28 @@
+# Dockerfile.processor — NetVantage Metrics Processor
+#
+# Multi-stage build: compile Go binary, copy into minimal runtime image.
+# Supports multi-arch: linux/amd64, linux/arm64.
+
+FROM golang:1.22-alpine AS builder
+
+WORKDIR /src
+
+# Cache dependencies.
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Build the processor binary.
+COPY . .
+RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /bin/netvantage-processor ./cmd/processor/
+
+# --- Runtime ---
+FROM alpine:3.19
+
+RUN apk add --no-cache ca-certificates tzdata
+
+COPY --from=builder /bin/netvantage-processor /usr/local/bin/netvantage-processor
+
+# Metrics endpoint default port.
+EXPOSE 9091
+
+ENTRYPOINT ["netvantage-processor"]
