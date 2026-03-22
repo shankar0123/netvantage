@@ -190,9 +190,12 @@ func TestAuditList_WithOffset(t *testing.T) {
 		t.Errorf("expected 5 entries, got %d", len(entries))
 	}
 
-	// Verify it's the second page (different IDs)
-	if entries[0].ID <= 5 {
-		t.Errorf("offset did not skip first 5 entries")
+	// Verify it's the second page — IDs sorted descending, so offset=5 skips [10,9,8,7,6],
+	// returning [5,4,3,2,1]. No entry should have ID > 5.
+	for _, e := range entries {
+		if e.ID > 5 {
+			t.Errorf("offset did not skip first 5 entries: found ID %d", e.ID)
+		}
 	}
 }
 

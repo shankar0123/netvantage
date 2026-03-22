@@ -492,15 +492,16 @@ func TestAuditLogger_TableDriven(t *testing.T) {
 			handler.ServeHTTP(w, req)
 
 			// Wait a bit for async logging
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(50 * time.Millisecond)
 
-			audited := len(repo.entries) > 0
+			entries := repo.getEntries()
+			audited := len(entries) > 0
 			if audited != tt.shouldAudit {
 				t.Errorf("expected audit=%v, got audit=%v", tt.shouldAudit, audited)
 			}
 
 			if audited && tt.expectedAction != "" {
-				entry := repo.entries[0]
+				entry := entries[0]
 				if entry.Action != tt.expectedAction {
 					t.Errorf("expected action %s, got %s", tt.expectedAction, entry.Action)
 				}
