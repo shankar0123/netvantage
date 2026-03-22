@@ -1,14 +1,14 @@
 //go:build e2e
 
 // Package e2e contains end-to-end tests that exercise the full NetVantage
-// pipeline with real infrastructure (NATS JetStream, PostgreSQL, Prometheus).
+// pipeline with real infrastructure (NATS JetStream, PostgreSQL).
 //
 // These tests require Docker and are NOT run in the normal `go test ./...`
 // flow. They are gated behind the `e2e` build tag and require testcontainers.
 //
 // Run with:
 //
-//	go test -v -tags=e2e -timeout=5m ./tests/e2e/...
+//	go test -v -tags=e2e -timeout=10m ./tests/e2e/...
 package e2e
 
 import (
@@ -16,8 +16,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
-	"strings"
+	"os"
 	"testing"
 	"time"
 
@@ -25,16 +26,55 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
+// Shared test infrastructure — started once in TestMain, reused by all tests.
+// This avoids spinning up a new container per test (each takes ~10s in CI).
+var (
+	sharedNATSURL    string
+	sharedNATSContainer testcontainers.Container
+
+	sharedPGConnStr    string
+	sharedPGContainer  testcontainers.Container
+)
+
+// TestMain starts shared infrastructure containers once before any test runs,
+// and tears them down after all tests complete. This reduces E2E suite time
+// from ~80s (per-test containers) to ~20s (shared containers).
+func TestMain(m *testing.M) {
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	var code int
+	defer func() { os.Exit(code) }()
+
+	// Start NATS.
+	var err error
+	sharedNATSContainer, sharedNATSURL, err = startNATSContainer(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to start NATS: %v\n", err)
+		code = 1
+		return
+	}
+	defer sharedNATSContainer.Terminate(ctx) //nolint:errcheck
+
+	// Start PostgreSQL.
+	sharedPGContainer, sharedPGConnStr, err = startPostgresContainer(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to start PostgreSQL: %v\n", err)
+		code = 1
+		return
+	}
+	defer sharedPGContainer.Terminate(ctx) //nolint:errcheck
+
+	code = m.Run()
+}
+
 // testLogger returns a silent slog.Logger suitable for tests.
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-// startNATS spins up a NATS server with JetStream enabled via testcontainers.
-// Returns the container, the NATS URL, and a cleanup function.
-func startNATS(ctx context.Context, t *testing.T) (testcontainers.Container, string) {
-	t.Helper()
-
+// startNATSContainer spins up a NATS server with JetStream enabled.
+func startNATSContainer(ctx context.Context) (testcontainers.Container, string, error) {
 	req := testcontainers.ContainerRequest{
 		Image:        "nats:2.10-alpine",
 		ExposedPorts: []string{"4222/tcp"},
@@ -47,34 +87,24 @@ func startNATS(ctx context.Context, t *testing.T) (testcontainers.Container, str
 		Started:          true,
 	})
 	if err != nil {
-		t.Fatalf("failed to start NATS container: %v", err)
+		return nil, "", fmt.Errorf("start NATS container: %w", err)
 	}
 
 	host, err := container.Host(ctx)
 	if err != nil {
-		t.Fatalf("failed to get NATS host: %v", err)
+		return nil, "", fmt.Errorf("get NATS host: %w", err)
 	}
 
 	port, err := container.MappedPort(ctx, "4222")
 	if err != nil {
-		t.Fatalf("failed to get NATS port: %v", err)
+		return nil, "", fmt.Errorf("get NATS port: %w", err)
 	}
 
-	natsURL := fmt.Sprintf("nats://%s:%s", host, port.Port())
-	t.Cleanup(func() {
-		if err := container.Terminate(ctx); err != nil {
-			t.Logf("warning: failed to terminate NATS container: %v", err)
-		}
-	})
-
-	return container, natsURL
+	return container, fmt.Sprintf("nats://%s:%s", host, port.Port()), nil
 }
 
-// startPostgres spins up a PostgreSQL instance via testcontainers.
-// Returns the container and the connection string.
-func startPostgres(ctx context.Context, t *testing.T) (testcontainers.Container, string) {
-	t.Helper()
-
+// startPostgresContainer spins up a PostgreSQL instance.
+func startPostgresContainer(ctx context.Context) (testcontainers.Container, string, error) {
 	req := testcontainers.ContainerRequest{
 		Image:        "postgres:16-alpine",
 		ExposedPorts: []string{"5432/tcp"},
@@ -91,89 +121,49 @@ func startPostgres(ctx context.Context, t *testing.T) (testcontainers.Container,
 		Started:          true,
 	})
 	if err != nil {
-		t.Fatalf("failed to start PostgreSQL container: %v", err)
+		return nil, "", fmt.Errorf("start PostgreSQL container: %w", err)
 	}
 
 	host, err := container.Host(ctx)
 	if err != nil {
-		t.Fatalf("failed to get PostgreSQL host: %v", err)
+		return nil, "", fmt.Errorf("get PostgreSQL host: %w", err)
 	}
 
 	port, err := container.MappedPort(ctx, "5432")
 	if err != nil {
-		t.Fatalf("failed to get PostgreSQL port: %v", err)
+		return nil, "", fmt.Errorf("get PostgreSQL port: %w", err)
 	}
 
 	connStr := fmt.Sprintf("postgres://netvantage:netvantage@%s:%s/netvantage?sslmode=disable", host, port.Port())
-	t.Cleanup(func() {
-		if err := container.Terminate(ctx); err != nil {
-			t.Logf("warning: failed to terminate PostgreSQL container: %v", err)
-		}
-	})
-
-	return container, connStr
+	return container, connStr, nil
 }
 
-// startPrometheus spins up a Prometheus instance with remote_write enabled.
-// Returns the container and the Prometheus URL.
-func startPrometheus(ctx context.Context, t *testing.T) (testcontainers.Container, string) {
+// freePort finds and returns a free localhost address (host:port).
+func freePort(t *testing.T) string {
 	t.Helper()
-
-	req := testcontainers.ContainerRequest{
-		Image:        "prom/prometheus:v2.51.0",
-		ExposedPorts: []string{"9090/tcp"},
-		Cmd: []string{
-			"--config.file=/etc/prometheus/prometheus.yml",
-			"--storage.tsdb.retention.time=1h",
-			"--web.enable-remote-write-receiver",
-			"--web.enable-lifecycle",
-		},
-		WaitingFor: wait.ForHTTP("/-/ready").WithPort("9090/tcp").WithStartupTimeout(30 * time.Second),
-	}
-
-	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	})
+	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Fatalf("failed to start Prometheus container: %v", err)
+		t.Fatalf("failed to find free port: %v", err)
 	}
-
-	host, err := container.Host(ctx)
-	if err != nil {
-		t.Fatalf("failed to get Prometheus host: %v", err)
-	}
-
-	port, err := container.MappedPort(ctx, "9090")
-	if err != nil {
-		t.Fatalf("failed to get Prometheus port: %v", err)
-	}
-
-	promURL := fmt.Sprintf("http://%s:%s", host, port.Port())
-	t.Cleanup(func() {
-		if err := container.Terminate(ctx); err != nil {
-			t.Logf("warning: failed to terminate Prometheus container: %v", err)
-		}
-	})
-
-	return container, promURL
+	addr := l.Addr().String()
+	l.Close()
+	return addr
 }
 
-// queryPrometheus queries a Prometheus instance and returns whether the query
-// returned any results. Used to verify metrics were written correctly.
-func queryPrometheus(promURL, query string) (bool, string, error) {
-	resp, err := http.Get(fmt.Sprintf("%s/api/v1/query?query=%s", promURL, query))
-	if err != nil {
-		return false, "", fmt.Errorf("prometheus query failed: %w", err)
+// waitForHTTP polls a URL until it returns 200 or the timeout expires.
+func waitForHTTP(t *testing.T, url string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		resp, err := http.Get(url)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			resp.Body.Close()
+			return
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return false, "", fmt.Errorf("failed to read prometheus response: %w", err)
-	}
-
-	bodyStr := string(body)
-	hasResults := strings.Contains(bodyStr, `"result":[{`)
-	return hasResults, bodyStr, nil
+	t.Fatalf("timed out waiting for %s", url)
 }

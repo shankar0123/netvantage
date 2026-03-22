@@ -10,8 +10,8 @@ FROM golang:1.22-alpine AS builder
 
 WORKDIR /src
 
-# Cache dependencies.
-COPY go.mod go.sum ./
+# Cache dependencies (go.sum is not committed — generated at build time).
+COPY go.mod ./
 RUN go mod download
 
 # Build the agent binary.

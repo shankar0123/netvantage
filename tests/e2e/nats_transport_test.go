@@ -12,22 +12,19 @@ import (
 )
 
 // TestNATSTransport_PublishSubscribe verifies that the NATS JetStream transport
-// can publish a message and deliver it to a subscriber. This exercises the real
-// NATS protocol, JetStream stream creation, durable consumers, and ack/nack —
-// none of which are covered by the in-memory transport used in unit tests.
+// can publish a message and deliver it to a subscriber using a real NATS server.
 func TestNATSTransport_PublishSubscribe(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	_, natsURL := startNATS(ctx, t)
-
-	transport, err := natstransport.New(natstransport.Config{URL: natsURL}, testLogger())
+	transport, err := natstransport.New(natstransport.Config{URL: sharedNATSURL}, testLogger())
 	if err != nil {
 		t.Fatalf("failed to create NATS transport: %v", err)
 	}
 	defer transport.Close()
 
-	topic := "netvantage.ping.results"
+	// Use a unique topic to avoid collisions with other tests on the shared NATS.
+	topic := "netvantage.e2e.pubsub"
 	payload := []byte(`{"test_id":"e2e-1","agent_id":"agent-e2e","success":true}`)
 
 	var (
@@ -36,7 +33,6 @@ func TestNATSTransport_PublishSubscribe(t *testing.T) {
 		done     = make(chan struct{})
 	)
 
-	// Subscribe in a goroutine — Subscribe blocks until ctx is cancelled.
 	subCtx, subCancel := context.WithCancel(ctx)
 	go func() {
 		_ = transport.Subscribe(subCtx, topic, func(_ context.Context, msg []byte) error {
@@ -49,15 +45,13 @@ func TestNATSTransport_PublishSubscribe(t *testing.T) {
 		})
 	}()
 
-	// Give the subscription a moment to establish.
-	time.Sleep(500 * time.Millisecond)
+	// Give the JetStream subscription time to establish.
+	time.Sleep(1 * time.Second)
 
-	// Publish.
 	if err := transport.Publish(ctx, topic, payload); err != nil {
 		t.Fatalf("publish failed: %v", err)
 	}
 
-	// Wait for delivery.
 	select {
 	case <-done:
 		// Success.
@@ -77,18 +71,16 @@ func TestNATSTransport_PublishSubscribe(t *testing.T) {
 // TestNATSTransport_MultipleSubscribers verifies that multiple subscribers on
 // different topics each receive their own messages independently.
 func TestNATSTransport_MultipleSubscribers(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	_, natsURL := startNATS(ctx, t)
-
-	transport, err := natstransport.New(natstransport.Config{URL: natsURL}, testLogger())
+	transport, err := natstransport.New(natstransport.Config{URL: sharedNATSURL}, testLogger())
 	if err != nil {
 		t.Fatalf("failed to create NATS transport: %v", err)
 	}
 	defer transport.Close()
 
-	topics := []string{"netvantage.ping.results", "netvantage.dns.results"}
+	topics := []string{"netvantage.e2e.multi1", "netvantage.e2e.multi2"}
 	var (
 		mu       sync.Mutex
 		received = make(map[string][]byte)
@@ -112,9 +104,8 @@ func TestNATSTransport_MultipleSubscribers(t *testing.T) {
 		}()
 	}
 
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
-	// Publish to each topic.
 	for _, topic := range topics {
 		payload := []byte(`{"topic":"` + topic + `"}`)
 		if err := transport.Publish(ctx, topic, payload); err != nil {
@@ -122,7 +113,6 @@ func TestNATSTransport_MultipleSubscribers(t *testing.T) {
 		}
 	}
 
-	// Wait for both messages.
 	waitCh := make(chan struct{})
 	go func() {
 		wg.Wait()
@@ -147,14 +137,13 @@ func TestNATSTransport_MultipleSubscribers(t *testing.T) {
 }
 
 // TestNATSTransport_ClosePreventsFurtherPublish verifies that closing the
-// transport returns ErrClosed on subsequent publish attempts.
+// transport returns an error on subsequent publish attempts.
 func TestNATSTransport_ClosePreventsFurtherPublish(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	_, natsURL := startNATS(ctx, t)
-
-	transport, err := natstransport.New(natstransport.Config{URL: natsURL}, testLogger())
+	// Create a separate transport for this test since we need to close it.
+	transport, err := natstransport.New(natstransport.Config{URL: sharedNATSURL}, testLogger())
 	if err != nil {
 		t.Fatalf("failed to create NATS transport: %v", err)
 	}
@@ -163,7 +152,7 @@ func TestNATSTransport_ClosePreventsFurtherPublish(t *testing.T) {
 		t.Fatalf("close failed: %v", err)
 	}
 
-	err = transport.Publish(ctx, "netvantage.ping.results", []byte(`{}`))
+	err = transport.Publish(ctx, "netvantage.e2e.closed", []byte(`{}`))
 	if err == nil {
 		t.Error("expected error publishing to closed transport, got nil")
 	}
