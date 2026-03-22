@@ -1,0 +1,319 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "Avg Ping RTT by POP",
+      "description": "Average round-trip time across all targets, per POP. Green <50ms, yellow <200ms, red >=200ms.",
+      "type": "bargauge",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.05 },
+              { "color": "red", "value": 0.2 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "minVizHeight": 75
+      },
+      "targets": [
+        {
+          "expr": "avg by (pop) (netvantage_ping_rtt_seconds{stat=\"avg\", target=\"$target\", pop=~\"$pop\"})",
+          "legendFormat": "{{ pop }}"
+        }
+      ]
+    },
+    {
+      "title": "Avg HTTP TTFB by POP",
+      "description": "Time to first byte for HTTP requests, per POP. Green <500ms, yellow <2s, red >=2s.",
+      "type": "bargauge",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 2 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "minVizHeight": 75
+      },
+      "targets": [
+        {
+          "expr": "avg by (pop) (netvantage_http_duration_seconds{phase=\"ttfb\", target=\"$target\", pop=~\"$pop\"})",
+          "legendFormat": "{{ pop }}"
+        }
+      ]
+    },
+    {
+      "title": "Packet Loss by POP",
+      "description": "Average packet loss ratio per POP. Green 0%, yellow >1%, red >5%.",
+      "type": "bargauge",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.01 },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "minVizHeight": 75
+      },
+      "targets": [
+        {
+          "expr": "avg by (pop) (netvantage_ping_packet_loss_ratio{target=\"$target\", pop=~\"$pop\"})",
+          "legendFormat": "{{ pop }}"
+        }
+      ]
+    },
+    {
+      "title": "Comprehensive POP Comparison",
+      "description": "Side-by-side metrics across all monitored POPs for the selected target.",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Value #rtt" },
+            "properties": [
+              { "id": "displayName", "value": "Ping RTT" },
+              { "id": "unit", "value": "s" },
+              { "id": "custom.align", "value": "auto" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Value #loss" },
+            "properties": [
+              { "id": "displayName", "value": "Packet Loss" },
+              { "id": "unit", "value": "percentunit" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Value #ttfb" },
+            "properties": [
+              { "id": "displayName", "value": "HTTP TTFB" },
+              { "id": "unit", "value": "s" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Value #httptotal" },
+            "properties": [
+              { "id": "displayName", "value": "HTTP Total" },
+              { "id": "unit", "value": "s" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Value #dns" },
+            "properties": [
+              { "id": "displayName", "value": "DNS Resolution" },
+              { "id": "unit", "value": "s" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Value #hops" },
+            "properties": [
+              { "id": "displayName", "value": "Hop Count" },
+              { "id": "unit", "value": "short" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Value #mismatch" },
+            "properties": [
+              { "id": "displayName", "value": "Path Mismatches" },
+              { "id": "unit", "value": "short" }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "Ping RTT", "desc": false }]
+      },
+      "targets": [
+        {
+          "expr": "avg by (pop) (netvantage_ping_rtt_seconds{stat=\"avg\", target=\"$target\", pop=~\"$pop\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "rtt"
+        },
+        {
+          "expr": "avg by (pop) (netvantage_ping_packet_loss_ratio{target=\"$target\", pop=~\"$pop\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "loss"
+        },
+        {
+          "expr": "avg by (pop) (netvantage_http_duration_seconds{phase=\"ttfb\", target=\"$target\", pop=~\"$pop\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "ttfb"
+        },
+        {
+          "expr": "avg by (pop) (netvantage_http_duration_seconds{phase=\"total\", target=\"$target\", pop=~\"$pop\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "httptotal"
+        },
+        {
+          "expr": "avg by (pop) (netvantage_dns_resolution_seconds{target=\"$target\", pop=~\"$pop\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "dns"
+        },
+        {
+          "expr": "avg by (pop) (netvantage_traceroute_hop_count{target=\"$target\", pop=~\"$pop\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "hops"
+        },
+        {
+          "expr": "sum by (pop) (netvantage_path_correlation_mismatch_total{target=\"$target\", pop=~\"$pop\"}) or on() vector(0)",
+          "format": "table",
+          "instant": true,
+          "refId": "mismatch"
+        }
+      ],
+      "transformations": [
+        { "id": "merge" },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "__name__": true, "job": true, "instance": true },
+            "renameByName": { "pop": "POP" }
+          }
+        }
+      ]
+    },
+    {
+      "title": "Ping RTT Trends by POP",
+      "description": "Historical RTT trends per POP for the selected target — identifies latency degradation patterns.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "auto" }
+        },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "netvantage_ping_rtt_seconds{stat=\"avg\", target=\"$target\", pop=~\"$pop\"}",
+          "legendFormat": "{{ pop }}"
+        }
+      ]
+    },
+    {
+      "title": "HTTP TTFB Trends by POP",
+      "description": "Historical TTFB trends per POP for the selected target — shows web service responsiveness changes.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 26 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "auto" }
+        },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "netvantage_http_duration_seconds{phase=\"ttfb\", target=\"$target\", pop=~\"$pop\"}",
+          "legendFormat": "{{ pop }}"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["netvantage", "pop", "comparison"],
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "selected": true, "text": "Prometheus", "value": "Prometheus" },
+        "hide": 0
+      },
+      {
+        "name": "target",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "query": "label_values(netvantage_ping_rtt_seconds, target)",
+        "includeAll": false,
+        "multi": false,
+        "current": { "selected": true, "text": "", "value": "" },
+        "refresh": 2,
+        "sort": 1,
+        "description": "Select a target to compare POPs"
+      },
+      {
+        "name": "pop",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "query": "label_values(netvantage_ping_rtt_seconds{target=\"$target\"}, pop)",
+        "includeAll": true,
+        "multi": true,
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "NetVantage — POP Comparison",
+  "description": "Side-by-side performance comparison across POPs for the same target. DASH-08.",
+  "uid": "netvantage-pop-comparison"
+}

@@ -59,7 +59,7 @@ Open each service and understand what you're looking at:
 
 ### Grafana — [http://localhost:3000](http://localhost:3000)
 
-Login with `admin` / `admin`. You'll see the NetVantage home dashboard, which links to all other dashboards.
+Login with `admin` / `netvantage` (the default password from Docker Compose). You'll see the NetVantage home dashboard, which links to all other dashboards.
 
 **Why the home dashboard exists:** When someone first opens Grafana, they should immediately see something useful — not a blank canvas. The home dashboard provides navigation and a quick status overview. It's a JSON file in `grafana/dashboards/home.json`, provisioned automatically on startup.
 
@@ -125,7 +125,7 @@ config_sync_interval: 60s
 Run the agent:
 
 ```bash
-./bin/agent --config agent.yaml
+./bin/netvantage-agent --config agent.yaml
 ```
 
 The agent ships with all four canary types compiled in: **ping**, **DNS**, **HTTP/S**, and **traceroute**. Once it connects to the control plane and syncs its test definitions, it begins executing tests immediately. Results are published to NATS JetStream, consumed by the Metrics Processor, and written to Prometheus.

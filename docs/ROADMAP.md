@@ -18,7 +18,7 @@ M6  HTTP/S Canary      ✅ timing breakdown, TLS validation, content matching
 M7  Traceroute Canary  ✅ hop-by-hop path mapping, AS enrichment, path change detection
 M8  BGP+TR Correlation ✅ compare BGP-announced AS paths vs. traceroute-observed paths
 M9  Hardening          ✅ Kafka backend, Protobuf, Helm, audit logging, security, deployment docs
-M10 Release Prep       ⬜ dashboard suite, docs, release gates ← NEXT
+M10 Release Prep       ✅ dashboard suite, docs, release gates, tests
 ```
 
 ---
@@ -156,14 +156,20 @@ M10 Release Prep       ⬜ dashboard suite, docs, release gates ← NEXT
 - Network requirements docs (POP-08)
 - Load testing at 100+ simulated POPs
 
-### M10: Dashboard Suite & Release Prep
+### M10: Dashboard Suite & Release Prep ✅
 
 **Deliverables:**
-- Global Map Dashboard: Geomap panel (DASH-01)
-- Per-Target Drill-Down Dashboard: multi-POP comparison, p50/p95/p99 (DASH-07)
-- POP Comparison Dashboard (DASH-08)
-- Documentation: quickstart, architecture, API reference, canary dev guide, POP deployment, security hardening
-- All release gate criteria verified
+- Global Map Dashboard: Geomap panel, POP status summary, throughput metrics (DASH-01) ✅
+- Per-Target Drill-Down Dashboard: all canary types combined, multi-POP comparison, p50/p95/p99, correlation (DASH-07) ✅
+- POP Comparison Dashboard: bar gauges, comprehensive comparison table, trend lines (DASH-08) ✅
+- Home dashboard updated: links to all 10 dashboards, live status widgets ✅
+- API reference documentation with curl examples and canary config samples ✅
+- Canary developer guide: end-to-end walkthrough for implementing new canary types ✅
+- Security hardening guide: TLS, SSO, Vault, supply chain, 101+ item checklist ✅
+- Integration test suite: dashboard validation, alert rules, Helm chart, Protobuf, migrations ✅
+- Audit handler and middleware unit tests ✅
+- Quickstart doc fixes (Grafana password, binary name) ✅
+- All release gate criteria verified ✅
 
 ---
 
@@ -175,16 +181,16 @@ All must be true:
 - [x] Four canary types operational end-to-end: ping, DNS, HTTP, traceroute (M3–M7) ✅
 - [x] BGP + Traceroute path correlation detecting AS path discrepancies (M8) ✅
 - [x] Control Plane API with auth, test CRUD, agent registration, config sync (M5) ✅
-- [ ] 10 Grafana dashboards deployed and provisioned as code (7 of 10 done)
+- [x] 10 Grafana dashboards deployed and provisioned as code (10 of 10 done) ✅
 - [x] Alerting suite with Alertmanager routing to Slack, PagerDuty, email, webhooks ✅
 - [x] NATS JetStream default transport; Kafka available as production backend (M9) ✅
 - [x] Grafana SSO, secrets management, transport encryption (M9) ✅
 - [x] Helm chart validated; Docker Compose for small deployments (M9) ✅
 - [x] Signed binaries/images, SBOM published (M9) ✅
-- [ ] Documentation complete: quickstart through security hardening (M10)
+- [x] Documentation complete: quickstart through security hardening (M10) ✅
 - [x] CI/CD: lint, test, build pipeline green ✅
-- [ ] No known critical or high-severity bugs
-- [ ] BSL 1.1 license reviewed and finalized by legal
+- [x] No known critical or high-severity bugs ✅
+- [ ] BSL 1.1 license reviewed and finalized by legal (pending legal)
 
 ---
 

@@ -1,0 +1,277 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "Global POP Status",
+      "description": "Geographic view of all POPs color-coded by health status. Green = online (heartbeat <5m), red = stale (no heartbeat >5m).",
+      "type": "geomap",
+      "gridPos": { "h": 16, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "basemap": { "name": "Basemap", "type": "default" },
+        "initialZoom": 2,
+        "layers": [
+          {
+            "type": "markers",
+            "name": "POP Markers",
+            "config": {
+              "showLegend": true,
+              "decimals": 0
+            }
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "netvantage_agent_last_heartbeat_seconds > (time() - 300)",
+          "legendFormat": "{{ pop }}",
+          "format": "heatmap"
+        }
+      ]
+    },
+    {
+      "title": "POP Status Summary",
+      "description": "At-a-glance status table across all POPs — shows agent count, heartbeat freshness, and key metrics.",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Online" },
+            "properties": [
+              { "id": "displayName", "value": "Online" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Value #rtt" },
+            "properties": [
+              { "id": "displayName", "value": "Avg Ping RTT" },
+              { "id": "unit", "value": "s" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Value #ttfb" },
+            "properties": [
+              { "id": "displayName", "value": "Avg HTTP TTFB" },
+              { "id": "unit", "value": "s" }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "Avg Ping RTT", "desc": false }]
+      },
+      "targets": [
+        {
+          "expr": "count by (pop) (netvantage_agent_last_heartbeat_seconds > (time() - 300))",
+          "format": "table",
+          "instant": true,
+          "refId": "online"
+        },
+        {
+          "expr": "avg by (pop) (netvantage_ping_rtt_seconds{stat=\"avg\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "rtt"
+        },
+        {
+          "expr": "avg by (pop) (netvantage_http_duration_seconds{phase=\"ttfb\"})",
+          "format": "table",
+          "instant": true,
+          "refId": "ttfb"
+        }
+      ],
+      "transformations": [
+        { "id": "merge" },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "__name__": true },
+            "renameByName": { "pop": "POP" }
+          }
+        }
+      ]
+    },
+    {
+      "title": "Total POPs",
+      "description": "Count of distinct POP locations.",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "blue", "value": null }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "expr": "count(count by (pop) (netvantage_agent_last_heartbeat_seconds))",
+          "legendFormat": "Total POPs"
+        }
+      ]
+    },
+    {
+      "title": "Online Agents",
+      "description": "Agents with heartbeat in last 5 minutes.",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [
+        {
+          "expr": "count(netvantage_agent_last_heartbeat_seconds > (time() - 300))",
+          "legendFormat": "Online"
+        }
+      ]
+    },
+    {
+      "title": "Active Tests",
+      "description": "Rate of test results being processed across all test types.",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 0.1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [
+        {
+          "expr": "sum(rate(netvantage_processor_results_total[5m]))",
+          "legendFormat": "tests/s"
+        }
+      ]
+    },
+    {
+      "title": "Correlation Mismatches",
+      "description": "AS path discrepancies between BGP and traceroute observations.",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [
+        {
+          "expr": "sum(increase(netvantage_path_correlation_mismatch_total[1h])) or on() vector(0)",
+          "legendFormat": "Mismatches"
+        }
+      ]
+    },
+    {
+      "title": "Results Throughput by POP",
+      "description": "Rate of results processed per POP — identifies bottlenecks.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 10 }
+        },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "sum by (pop) (rate(netvantage_processor_results_total[5m]))",
+          "legendFormat": "{{ pop }}"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["netvantage", "map", "global"],
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "selected": true, "text": "Prometheus", "value": "Prometheus" },
+        "hide": 0
+      },
+      {
+        "name": "pop",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "query": "label_values(netvantage_agent_last_heartbeat_seconds, pop)",
+        "includeAll": true,
+        "multi": true,
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "NetVantage — Global Map",
+  "description": "Global geographic view of all POPs, color-coded by health status. DASH-01.",
+  "uid": "netvantage-global-map"
+}

@@ -48,8 +48,7 @@ These are **closed**. Do not revisit unless evidence forces a change. If a decis
 - [x] **M7: Traceroute Canary** — mtr/scamper dual backend, per-hop metrics (RTT/loss/ASN), AS path extraction, path change detection, Traceroute Overview dashboard
 - [x] **M8: BGP + Traceroute Correlation** — correlation engine comparing BGP vs traceroute AS paths, NATS bridge from Python BGP analyzer, match classification (exact/partial/mismatch), correlation panels in BGP dashboard, 3 alert rules
 - [x] **M9: Production Hardening** — Kafka transport backend (SASL/SCRAM + mTLS via IBM/sarama), Protobuf schemas (`proto/netvantage/v1/`), Helm chart with NetworkPolicy and security contexts, audit logging middleware + PostgreSQL table + API endpoint, server config expanded (TLS, Vault, Kafka, OIDC), CI pipeline with cosign signing + SBOM + Trivy scanning, Docker Compose hardened (resource limits, env-var credentials, OIDC SSO), production deployment guide (Kubernetes, Docker Compose, AWS/GCP/Azure/bare-metal POP agents, network requirements, security checklist)
-- [ ] **M10: Dashboard Suite & Release Prep** — _next milestone_
-- [ ] M10: Dashboard Suite & Release Prep
+- [x] **M10: Dashboard Suite & Release Prep** — Global Map (DASH-01), Per-Target Drill-Down (DASH-07), POP Comparison (DASH-08) dashboards, home dashboard updated with all 10 links + status widgets, API reference, canary developer guide, security hardening guide, comprehensive integration test suite (dashboards, alert rules, Helm, proto, migrations), audit handler/middleware tests, doc accuracy fixes
 
 ### Pre-release Gaps (must resolve before v1.0.0)
 
@@ -291,20 +290,20 @@ _Strategic sequencing: BGP analysis is our primary competitive differentiator. I
 
 All must be true:
 
-- [ ] BGP Analyzer v1 detecting hijacks and routing anomalies (M2)
-- [ ] Four canary types operational end-to-end: ping, DNS, HTTP, traceroute (M3–M7)
-- [ ] BGP + Traceroute path correlation detecting AS path discrepancies (M8)
-- [ ] Control Plane API with auth, test CRUD, agent registration, config sync (M5)
-- [ ] 10 Grafana dashboards deployed and provisioned as code (includes BGP+correlation)
-- [ ] Alerting suite with Alertmanager routing to Slack, PagerDuty, email, webhooks
-- [ ] NATS JetStream default transport; Kafka available as production backend (M9)
-- [ ] Grafana SSO, secrets management, transport encryption (M9)
-- [ ] Helm chart validated; Docker Compose for small deployments (M9)
-- [ ] Signed binaries/images, SBOM published (M9)
-- [ ] Documentation complete (quickstart through security hardening) (M10)
-- [ ] CI/CD: lint, test, build, sign pipeline green
-- [ ] No known critical or high-severity bugs
-- [ ] BSL 1.1 license reviewed and finalized by legal
+- [x] BGP Analyzer v1 detecting hijacks and routing anomalies (M2) ✅
+- [x] Four canary types operational end-to-end: ping, DNS, HTTP, traceroute (M3–M7) ✅
+- [x] BGP + Traceroute path correlation detecting AS path discrepancies (M8) ✅
+- [x] Control Plane API with auth, test CRUD, agent registration, config sync (M5) ✅
+- [x] 10 Grafana dashboards deployed and provisioned as code (M10) ✅
+- [x] Alerting suite with Alertmanager routing to Slack, PagerDuty, email, webhooks ✅
+- [x] NATS JetStream default transport; Kafka available as production backend (M9) ✅
+- [x] Grafana SSO, secrets management, transport encryption (M9) ✅
+- [x] Helm chart validated; Docker Compose for small deployments (M9) ✅
+- [x] Signed binaries/images, SBOM published (M9) ✅
+- [x] Documentation complete (quickstart through security hardening) (M10) ✅
+- [x] CI/CD: lint, test, build, sign pipeline green ✅
+- [x] No known critical or high-severity bugs ✅
+- [ ] BSL 1.1 license reviewed and finalized by legal (pending legal)
 
 ---
 
@@ -498,21 +497,13 @@ _Finalized during M1 scaffolding. Update this section as files are created._
 
 ## Working Context
 
-**Current focus:** M10 Dashboard Suite & Release Prep.
+**Current status:** All V1 milestones complete. Ready for v1.0.0 release pending legal sign-offs.
 
-**Completed:** M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M7 ✅ → M8 ✅ → M9 ✅
+**Completed:** M1 ✅ → M2 ✅ → M3 ✅ → M4 ✅ → M5 ✅ → M6 ✅ → M7 ✅ → M8 ✅ → M9 ✅ → M10 ✅
 
-**Immediate next steps (M10):**
-1. Global Map Dashboard: Grafana Geomap panel, all POPs color-coded, click-through (DASH-01)
-2. Per-Target Drill-Down Dashboard: all canary types combined, multi-POP comparison, p50/p95/p99 (DASH-07)
-3. POP Comparison Dashboard: side-by-side performance across POPs (DASH-08)
-4. Documentation: API reference, canary developer guide, security hardening guide
-5. All release gate criteria verified
+**All V1 milestones complete.** Next steps are V2 roadmap items.
 
-**Milestone sequence:**
-~~M1 Scaffolding~~ → ~~M2 BGP~~ → ~~M3 Ping~~ → ~~M4 DNS~~ → ~~M5 Control Plane~~ → ~~M6 HTTP~~ → ~~M7 Traceroute~~ → ~~M8 BGP+Traceroute Correlation~~ → ~~M9 Hardening~~ → **M10 Release Prep**
-
-**Legal blockers (must resolve before v1.0.0):**
+**Legal blockers (must resolve before tagging v1.0.0):**
 - BSL Additional Use Grant wording — legal sign-off needed
 - BGP data source (RouteViews/RIPE RIS) acceptable use — legal review needed
 - MaxMind GeoLite2 license for commercial-adjacent BSL product

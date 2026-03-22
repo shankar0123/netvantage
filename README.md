@@ -198,6 +198,9 @@ All dashboards are provisioned as code from `grafana/dashboards/` — no manual 
 | HTTP Overview | `http-overview.json` | Response time breakdown, status codes, TLS cert expiry, TTFB |
 | Traceroute Overview | `traceroute-overview.json` | Per-hop latency heatmap, reachability, path changes, hop loss |
 | Platform Health | `platform-health.json` | Agent heartbeats, NATS consumer lag, processing rates, API latency |
+| Global Map | `global-map.json` | Geographic view of all POPs, color-coded by health status |
+| Per-Target Drill-Down | `target-drilldown.json` | All canary types combined for a target, p50/p95/p99 across POPs |
+| POP Comparison | `pop-comparison.json` | Side-by-side performance comparison across POPs |
 
 ## Alerting
 
@@ -263,7 +266,7 @@ NetVantage is in active early development. The BGP analyzer — our primary comp
 | M7: Traceroute | ✅ Complete | Hop-by-hop path mapping with AS path detection |
 | M8: BGP+Traceroute | ✅ Complete | AS path correlation engine — BGP vs. traceroute comparison |
 | M9: Hardening | ✅ Complete | Kafka backend, Protobuf, Helm, security, audit logging |
-| M10: Release Prep | 🔜 Next | Dashboard suite, docs, release gates |
+| M10: Release Prep | ✅ Complete | Dashboard suite, docs, release gates |
 
 ## Documentation
 
@@ -274,6 +277,9 @@ NetVantage is in active early development. The BGP analyzer — our primary comp
 | **[BGP Monitoring Demo](docs/quickstart-bgp.md)** | Set up hijack detection, RPKI validation, and explore the BGP dashboard. |
 | **[Architecture](docs/ARCHITECTURE.md)** | Technical deep dive with design rationale for every decision. |
 | **[Production Deployment](docs/deployment-guide.md)** | Kubernetes (Helm), Docker Compose, POP agents, network requirements, security hardening. |
+| **[API Reference](docs/api-reference.md)** | Complete Control Plane API documentation with curl examples. |
+| **[Canary Developer Guide](docs/canary-developer-guide.md)** | How to implement new canary types end-to-end. |
+| **[Security Hardening](docs/security-hardening.md)** | TLS, SSO, secrets management, supply chain security, pre-deployment checklist. |
 | **[Contributing](docs/CONTRIBUTING.md)** | Development workflow, conventions, and how to add canary types. |
 
 ## Tech Stack
@@ -353,9 +359,9 @@ The feature that justifies having both BGP and traceroute in one platform. The c
 
 Kafka transport backend with SASL/SCRAM (SHA-256/SHA-512) authentication and mTLS support via IBM/sarama, implementing the same `Publisher`/`Consumer` interfaces as the NATS backend — swap with a single config change. Protobuf schema definitions (`proto/netvantage/v1/`) for all transport messages (test results, BGP updates, agent heartbeats), ready for M10 wire migration. Grafana OAuth2/OIDC SSO via environment variables, anonymous access disabled by default, security headers enabled. Server config expanded with TLS, Vault integration, Kafka, and OIDC settings — all environment-variable-driven. Audit logging middleware records all Control Plane mutations (POST/PUT/DELETE/PATCH) with actor, role, action, resource, source IP, and request body as change diff — stored in PostgreSQL `audit_log` table, queryable via `GET /api/v1/audit`. Helm chart (`deploy/helm/netvantage/`) with server, processor, agent (DaemonSet), NetworkPolicy defaults, secrets management, resource limits, and security contexts (runAsNonRoot, readOnlyRootFilesystem, drop ALL capabilities). CI pipeline extended with Helm lint, protobuf validation, Trivy security scanning, gosec static analysis, cosign keyless container signing, SBOM generation via syft, and container vulnerability scanning. Docker Compose hardened with resource limits, environment-variable credentials (no more hardcoded passwords), and `.env.example` template. Production deployment guide (`docs/deployment-guide.md`) covering Kubernetes (Helm), Docker Compose, and POP agent deployment on AWS, GCP, Azure, and bare-metal with network requirements, firewall rules, and security hardening checklist.
 
-#### M10: Dashboard Suite & Release Prep
+#### M10: Dashboard Suite & Release Prep ✅
 
-Global Map Dashboard (Grafana Geomap, all POPs color-coded with click-through), Per-Target Drill-Down Dashboard (all canary types combined, multi-POP comparison, p50/p95/p99), POP Comparison Dashboard (side-by-side performance), complete documentation suite (quickstart through security hardening), all release gate criteria verified.
+Global Map Dashboard (Grafana Geomap, all POPs color-coded with click-through, DASH-01), Per-Target Drill-Down Dashboard (all canary types combined, multi-POP comparison, p50/p95/p99, DASH-07), POP Comparison Dashboard (side-by-side performance across POPs, DASH-08). Home dashboard updated with links to all 10 dashboards and live status widgets. Documentation suite completed: API reference with curl examples, canary developer guide for extending the platform, security hardening guide with operational checklists. Comprehensive integration test suite for dashboard validation, alert rule validation, Helm chart validation, Protobuf schema validation, and SQL migration validation. Audit handler and middleware unit tests. All release gate criteria verified.
 
 #### v1.0.0 Release Gates
 

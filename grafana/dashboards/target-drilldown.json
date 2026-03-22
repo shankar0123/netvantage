@@ -1,0 +1,363 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "title": "Ping Reachability",
+      "description": "Percentage of successful ping probes (1 - packet loss).",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.95 },
+              { "color": "green", "value": 0.99 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [
+        {
+          "expr": "avg(1 - netvantage_ping_packet_loss_ratio{target=\"$target\", pop=~\"$pop\"})",
+          "legendFormat": "Reachability"
+        }
+      ]
+    },
+    {
+      "title": "HTTP Success Rate",
+      "description": "Percentage of HTTP requests returning 2xx status codes.",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.95 },
+              { "color": "green", "value": 0.99 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [
+        {
+          "expr": "sum(rate(netvantage_http_status_code{target=\"$target\", pop=~\"$pop\", code=~\"2..\"}[5m])) / sum(rate(netvantage_http_status_code{target=\"$target\", pop=~\"$pop\"}[5m]))",
+          "legendFormat": "Success Rate"
+        }
+      ]
+    },
+    {
+      "title": "DNS Resolution Rate",
+      "description": "Percentage of successful DNS queries (non-SERVFAIL/NXDOMAIN).",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.95 },
+              { "color": "green", "value": 0.99 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [
+        {
+          "expr": "sum(rate(netvantage_dns_response_code{target=\"$target\", pop=~\"$pop\", code!~\"SERVFAIL|NXDOMAIN\"}[5m])) / sum(rate(netvantage_dns_response_code{target=\"$target\", pop=~\"$pop\"}[5m]))",
+          "legendFormat": "Success Rate"
+        }
+      ]
+    },
+    {
+      "title": "Ping RTT by POP",
+      "description": "Average round-trip time for ping probes to target, per POP.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "auto" }
+        },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "netvantage_ping_rtt_seconds{stat=\"avg\", target=\"$target\", pop=~\"$pop\"}",
+          "legendFormat": "{{ pop }}"
+        }
+      ]
+    },
+    {
+      "title": "HTTP TTFB by POP",
+      "description": "Time to first byte for HTTP requests to target, per POP.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "fillOpacity": 10, "showPoints": "auto" }
+        },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "netvantage_http_duration_seconds{phase=\"ttfb\", target=\"$target\", pop=~\"$pop\"}",
+          "legendFormat": "{{ pop }}"
+        }
+      ]
+    },
+    {
+      "title": "Ping p50/p95/p99",
+      "description": "Percentile distribution of ping RTT values.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 5 }
+        },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "netvantage_ping_rtt_seconds{stat=\"avg\", target=\"$target\", pop=~\"$pop\"}",
+          "legendFormat": "avg ({{ pop }})"
+        },
+        {
+          "expr": "netvantage_ping_rtt_seconds{stat=\"max\", target=\"$target\", pop=~\"$pop\"}",
+          "legendFormat": "max ({{ pop }})"
+        },
+        {
+          "expr": "netvantage_ping_rtt_seconds{stat=\"min\", target=\"$target\", pop=~\"$pop\"}",
+          "legendFormat": "min ({{ pop }})"
+        }
+      ]
+    },
+    {
+      "title": "HTTP Response Time p50/p95/p99",
+      "description": "Percentile distribution of HTTP total response time.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 5 }
+        },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "netvantage_http_duration_seconds{phase=\"total\", target=\"$target\", pop=~\"$pop\"}",
+          "legendFormat": "{{ pop }}"
+        }
+      ]
+    },
+    {
+      "title": "DNS Resolution p50/p95/p99",
+      "description": "Percentile distribution of DNS query response times.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 5 }
+        },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "netvantage_dns_resolution_seconds{target=\"$target\", pop=~\"$pop\"}",
+          "legendFormat": "{{ pop }}"
+        }
+      ]
+    },
+    {
+      "title": "Traceroute Hops",
+      "description": "Current hop-by-hop path to target with RTT data.",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Value" },
+            "properties": [
+              { "id": "unit", "value": "s" }
+            ]
+          }
+        ]
+      },
+      "options": { "showHeader": true, "sortBy": [] },
+      "targets": [
+        {
+          "expr": "netvantage_traceroute_hop_rtt_seconds{target=\"$target\", pop=~\"$pop\"}",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        { "id": "merge" },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "__name__": true, "job": true, "instance": true },
+            "renameByName": { "hop": "Hop", "hop_ip": "IP", "hop_asn": "ASN", "target": "Target", "pop": "POP" }
+          }
+        }
+      ]
+    },
+    {
+      "title": "Path Changes",
+      "description": "Timeline of traceroute path changes to target.",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "bars", "fillOpacity": 80 }
+        },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "increase(netvantage_traceroute_path_change_total{target=\"$target\", pop=~\"$pop\"}[5m])",
+          "legendFormat": "{{ pop }}"
+        }
+      ]
+    },
+    {
+      "title": "AS Path Mismatches",
+      "description": "Discrepancies between BGP-announced and traceroute-observed AS paths.",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 28 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" },
+      "targets": [
+        {
+          "expr": "sum(netvantage_path_correlation_mismatch_total{target=\"$target\", pop=~\"$pop\"}) or on() vector(0)",
+          "legendFormat": "Mismatches"
+        }
+      ]
+    },
+    {
+      "title": "BGP Events for Target",
+      "description": "BGP announcements, withdrawals, and anomalies detected for target prefix.",
+      "type": "timeseries",
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 28 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "bars", "fillOpacity": 80 }
+        },
+        "overrides": []
+      },
+      "options": { "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "expr": "increase(netvantage_bgp_event_total{target=\"$target\"}[5m])",
+          "legendFormat": "{{ type }}"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["netvantage", "target", "drilldown"],
+  "templating": {
+    "list": [
+      {
+        "name": "DS_PROMETHEUS",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "selected": true, "text": "Prometheus", "value": "Prometheus" },
+        "hide": 0
+      },
+      {
+        "name": "target",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "query": "label_values(netvantage_ping_rtt_seconds, target)",
+        "includeAll": false,
+        "multi": false,
+        "current": { "selected": true, "text": "", "value": "" },
+        "refresh": 2,
+        "sort": 1,
+        "description": "Select a target to analyze"
+      },
+      {
+        "name": "pop",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "query": "label_values(netvantage_ping_rtt_seconds{target=\"$target\"}, pop)",
+        "includeAll": true,
+        "multi": true,
+        "current": { "selected": true, "text": "All", "value": "$__all" },
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
+  },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "NetVantage — Per-Target Drill-Down",
+  "description": "Combined view of all canary types for a specific target across multiple POPs. DASH-07.",
+  "uid": "netvantage-target-drilldown"
+}
