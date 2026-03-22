@@ -25,7 +25,7 @@ The NetVantage Control Plane API provides centralized management of synthetic ne
 
 ## Overview
 
-The NetVantage Control Plane API follows REST conventions with JSON request/response bodies. All authenticated endpoints require an API key in the `X-API-Key` header or `Authorization: Bearer` header.
+The NetVantage Control Plane API follows REST conventions with JSON request/response bodies. All authenticated endpoints require a Bearer token in the `Authorization` header.
 
 **Key concepts:**
 
@@ -35,28 +35,24 @@ The NetVantage Control Plane API follows REST conventions with JSON request/resp
 - **Test Assignment:** Links a test definition to a POP (or to all POPs if empty).
 - **Audit Log:** Immutable record of all mutations (create, update, delete) with actor, timestamp, source IP, and change diff.
 
+**How it all connects:** When you create a test definition via the API, it gets stored in PostgreSQL. Agents periodically call the config sync endpoint to pull their assigned tests. They execute those tests (ping, DNS, HTTP, traceroute) and publish results through the message transport (NATS/Kafka) to the Metrics Processor, which writes to Prometheus. You never push test results through this API — it's purely a control plane for managing *what* gets tested, *where*, and *how often*.
+
 ---
 
 ## Authentication
 
-All endpoints except `/healthz` require authentication via API key.
+All endpoints except `/healthz` require authentication via Bearer token.
 
-### API Key Authentication
+### Bearer Token Authentication
 
-Include your API key in one of these headers:
-
-```http
-X-API-Key: your-api-key-here
-```
-
-Or use Bearer token format:
+Include your API key as a Bearer token:
 
 ```http
 Authorization: Bearer your-api-key-here
 ```
 
 API keys have:
-- **Role:** admin, operator, or viewer (affects scope of allowed operations)
+- **Role:** `admin` or `agent` (affects scope of allowed operations — `admin` has full access, `agent` is limited to config sync, heartbeat, and registration)
 - **Scopes:** List of resource types the key can access (e.g., `agents`, `tests`, `pops`, `audit`)
 - **Expiration:** Optional; expired keys are rejected
 - **Rate limit:** Per-client: 100 requests/second with burst of 200
@@ -188,7 +184,7 @@ Register a new agent with the control plane. The agent reports its capabilities,
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/agents \
-  -H "X-API-Key: your-key" \
+  -H "Authorization: Bearer your-key" \
   -H "Content-Type: application/json" \
   -d '{
     "id": "us-east-1-aws-01",
@@ -249,7 +245,7 @@ Retrieve all registered agents in the system.
 
 ```bash
 curl -X GET http://localhost:8080/api/v1/agents \
-  -H "X-API-Key: your-key"
+  -H "Authorization: Bearer your-key"
 ```
 
 **Response (200 OK):**
@@ -304,7 +300,7 @@ Retrieve details of a specific agent.
 
 ```bash
 curl -X GET http://localhost:8080/api/v1/agents/us-east-1-aws-01 \
-  -H "X-API-Key: your-key"
+  -H "Authorization: Bearer your-key"
 ```
 
 **Response (200 OK):**
@@ -343,7 +339,7 @@ Deregister an agent. Removes all agent metadata but does not delete associated t
 
 ```bash
 curl -X DELETE http://localhost:8080/api/v1/agents/us-east-1-aws-01 \
-  -H "X-API-Key: your-key"
+  -H "Authorization: Bearer your-key"
 ```
 
 **Response (204 No Content):**
@@ -367,7 +363,7 @@ Send a liveness signal from the agent. The control plane uses heartbeats to dete
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/agents/us-east-1-aws-01/heartbeat \
-  -H "X-API-Key: your-key" \
+  -H "Authorization: Bearer your-key" \
   -H "Content-Type: application/json" \
   -d '{
     "version": "1.0.0",
@@ -413,7 +409,7 @@ Create a new point of presence.
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/pops \
-  -H "X-API-Key: your-key" \
+  -H "Authorization: Bearer your-key" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "us-east-1-aws",
@@ -478,7 +474,7 @@ Retrieve all points of presence.
 
 ```bash
 curl -X GET http://localhost:8080/api/v1/pops \
-  -H "X-API-Key: your-key"
+  -H "Authorization: Bearer your-key"
 ```
 
 **Response (200 OK):**
@@ -532,7 +528,7 @@ Retrieve details of a specific POP.
 
 ```bash
 curl -X GET http://localhost:8080/api/v1/pops/us-east-1-aws \
-  -H "X-API-Key: your-key"
+  -H "Authorization: Bearer your-key"
 ```
 
 **Response (200 OK):**
@@ -571,7 +567,7 @@ Remove a point of presence. Agents must be deregistered from this POP before del
 
 ```bash
 curl -X DELETE http://localhost:8080/api/v1/pops/us-east-1-aws \
-  -H "X-API-Key: your-key"
+  -H "Authorization: Bearer your-key"
 ```
 
 **Response (204 No Content):**
@@ -599,7 +595,7 @@ Create a new test definition.
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/tests \
-  -H "X-API-Key: your-key" \
+  -H "Authorization: Bearer your-key" \
   -H "Content-Type: application/json" \
   -d '{
     "id": "test-ping-google-1s",
@@ -669,7 +665,7 @@ Retrieve all test definitions.
 
 ```bash
 curl -X GET http://localhost:8080/api/v1/tests \
-  -H "X-API-Key: your-key"
+  -H "Authorization: Bearer your-key"
 ```
 
 **Response (200 OK):**
@@ -725,7 +721,7 @@ Retrieve details of a specific test.
 
 ```bash
 curl -X GET http://localhost:8080/api/v1/tests/test-ping-google-1s \
-  -H "X-API-Key: your-key"
+  -H "Authorization: Bearer your-key"
 ```
 
 **Response (200 OK):**
@@ -765,7 +761,7 @@ Update an existing test definition. Fields omitted from the request are not modi
 
 ```bash
 curl -X PUT http://localhost:8080/api/v1/tests/test-ping-google-1s \
-  -H "X-API-Key: your-key" \
+  -H "Authorization: Bearer your-key" \
   -H "Content-Type: application/json" \
   -d '{
     "interval_ms": 30000,
@@ -825,7 +821,7 @@ Remove a test definition and all its assignments to POPs.
 
 ```bash
 curl -X DELETE http://localhost:8080/api/v1/tests/test-ping-google-1s \
-  -H "X-API-Key: your-key"
+  -H "Authorization: Bearer your-key"
 ```
 
 **Response (204 No Content):**
@@ -849,7 +845,7 @@ Assign (or reassign) a test to one or more POPs. Providing an empty POP list ass
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/tests/test-ping-google-1s/assign \
-  -H "X-API-Key: your-key" \
+  -H "Authorization: Bearer your-key" \
   -H "Content-Type: application/json" \
   -d '{
     "pops": ["us-east-1-aws", "eu-west-1-aws", "ap-southeast-1-aws"]
@@ -880,6 +876,10 @@ curl -X POST http://localhost:8080/api/v1/tests/test-ping-google-1s/assign \
 
 ## Config Sync
 
+Config sync is the mechanism agents use to stay in sync with centrally managed test definitions. Instead of hardcoding test configs in YAML files on each agent, the control plane stores all test definitions and their POP assignments in PostgreSQL. Agents pull their configuration on a regular interval (default: 60 seconds), which means you can add, modify, or disable tests from the API without restarting any agents.
+
+**Offline resilience:** Agents cache the last successful config sync response locally. If the control plane becomes unreachable, agents continue running their cached test definitions indefinitely — they never stop monitoring just because the management API is down.
+
 ### Get Agent Configuration
 
 **GET /api/v1/agents/{id}/config**
@@ -890,7 +890,7 @@ Retrieve the test configuration for an agent. The agent includes its POP name as
 
 ```bash
 curl -X GET "http://localhost:8080/api/v1/agents/us-east-1-aws-01/config?pop=us-east-1-aws" \
-  -H "X-API-Key: your-key"
+  -H "Authorization: Bearer your-key"
 ```
 
 **Query Parameters:**
@@ -950,6 +950,10 @@ curl -X GET "http://localhost:8080/api/v1/agents/us-east-1-aws-01/config?pop=us-
 
 ## Audit Log
 
+The audit log provides an immutable record of every change made through the API. This is essential for incident investigation ("who disabled that test at 3 AM?"), compliance requirements, and change tracking. Every POST, PUT, DELETE, and PATCH operation is automatically recorded by middleware — no opt-in required.
+
+Audit entries are append-only and cannot be modified or deleted through the API. They capture the actor (API key), the action, the affected resource, the client IP, and a detailed diff of what changed.
+
 ### List Audit Entries
 
 **GET /api/v1/audit**
@@ -960,7 +964,7 @@ Retrieve audit log entries for all mutations (create, update, delete). Results c
 
 ```bash
 curl -X GET "http://localhost:8080/api/v1/audit?limit=50&offset=0" \
-  -H "X-API-Key: your-key"
+  -H "Authorization: Bearer your-key"
 ```
 
 **Query Parameters:**
@@ -977,19 +981,19 @@ curl -X GET "http://localhost:8080/api/v1/audit?limit=50&offset=0" \
 Get last 50 audit entries:
 ```bash
 curl -X GET "http://localhost:8080/api/v1/audit" \
-  -H "X-API-Key: your-key"
+  -H "Authorization: Bearer your-key"
 ```
 
 Get audit entries for a specific test:
 ```bash
 curl -X GET "http://localhost:8080/api/v1/audit?resource=test&resource_id=test-ping-google-1s" \
-  -H "X-API-Key: your-key"
+  -H "Authorization: Bearer your-key"
 ```
 
 Get paginated results (100 entries per page, page 3):
 ```bash
 curl -X GET "http://localhost:8080/api/v1/audit?limit=100&offset=200" \
-  -H "X-API-Key: your-key"
+  -H "Authorization: Bearer your-key"
 ```
 
 **Response (200 OK):**
@@ -1042,7 +1046,7 @@ curl -X GET "http://localhost:8080/api/v1/audit?limit=100&offset=200" \
 | `id` | integer | Unique audit entry ID. |
 | `timestamp` | ISO 8601 | When the mutation occurred (UTC). |
 | `actor_id` | string | API key ID or user that performed the action. |
-| `actor_role` | string | Role of the actor (admin, operator, viewer). |
+| `actor_role` | string | Role of the actor (`admin` or `agent`). |
 | `action` | string | Type of mutation: `create`, `update`, `delete`. |
 | `resource` | string | Resource type: `agent`, `test`, `pop`. |
 | `resource_id` | string | ID of the affected resource. |
@@ -1081,7 +1085,7 @@ Test configurations are test-type-specific JSON objects embedded in the `config`
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/tests \
-  -H "X-API-Key: your-key" \
+  -H "Authorization: Bearer your-key" \
   -H "Content-Type: application/json" \
   -d '{
     "id": "test-ping-cloudflare-60s",
@@ -1121,7 +1125,7 @@ curl -X POST http://localhost:8080/api/v1/tests \
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/tests \
-  -H "X-API-Key: your-key" \
+  -H "Authorization: Bearer your-key" \
   -H "Content-Type: application/json" \
   -d '{
     "id": "test-dns-google-a-record",
@@ -1172,7 +1176,7 @@ curl -X POST http://localhost:8080/api/v1/tests \
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/tests \
-  -H "X-API-Key: your-key" \
+  -H "Authorization: Bearer your-key" \
   -H "Content-Type: application/json" \
   -d '{
     "id": "test-http-example-200",
@@ -1219,7 +1223,7 @@ curl -X POST http://localhost:8080/api/v1/tests \
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/tests \
-  -H "X-API-Key: your-key" \
+  -H "Authorization: Bearer your-key" \
   -H "Content-Type: application/json" \
   -d '{
     "id": "test-traceroute-google-120s",
@@ -1247,7 +1251,7 @@ curl -X POST http://localhost:8080/api/v1/tests \
 ```bash
 # 1. Create a POP
 curl -X POST http://localhost:8080/api/v1/pops \
-  -H "X-API-Key: your-key" \
+  -H "Authorization: Bearer your-key" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "us-west-2-aws",
@@ -1260,7 +1264,7 @@ curl -X POST http://localhost:8080/api/v1/pops \
 
 # 2. Register an agent at that POP
 curl -X POST http://localhost:8080/api/v1/agents \
-  -H "X-API-Key: your-key" \
+  -H "Authorization: Bearer your-key" \
   -H "Content-Type: application/json" \
   -d '{
     "id": "us-west-2-aws-01",
@@ -1271,11 +1275,11 @@ curl -X POST http://localhost:8080/api/v1/agents \
 
 # 3. Agent periodically calls config sync to get test assignments
 curl -X GET "http://localhost:8080/api/v1/agents/us-west-2-aws-01/config?pop=us-west-2-aws" \
-  -H "X-API-Key: your-key"
+  -H "Authorization: Bearer your-key"
 
 # 4. Agent sends heartbeats periodically
 curl -X POST http://localhost:8080/api/v1/agents/us-west-2-aws-01/heartbeat \
-  -H "X-API-Key: your-key" \
+  -H "Authorization: Bearer your-key" \
   -H "Content-Type: application/json" \
   -d '{
     "version": "1.0.0",
@@ -1289,7 +1293,7 @@ curl -X POST http://localhost:8080/api/v1/agents/us-west-2-aws-01/heartbeat \
 ```bash
 # 1. Create a test definition
 curl -X POST http://localhost:8080/api/v1/tests \
-  -H "X-API-Key: your-key" \
+  -H "Authorization: Bearer your-key" \
   -H "Content-Type: application/json" \
   -d '{
     "id": "test-http-api-health",
@@ -1308,7 +1312,7 @@ curl -X POST http://localhost:8080/api/v1/tests \
 
 # 2. Assign the test to specific POPs
 curl -X POST http://localhost:8080/api/v1/tests/test-http-api-health/assign \
-  -H "X-API-Key: your-key" \
+  -H "Authorization: Bearer your-key" \
   -H "Content-Type: application/json" \
   -d '{
     "pops": ["us-east-1-aws", "us-west-2-aws", "eu-west-1-aws"]
@@ -1316,7 +1320,7 @@ curl -X POST http://localhost:8080/api/v1/tests/test-http-api-health/assign \
 
 # 3. On next config sync, agents at those POPs will receive the test
 curl -X GET "http://localhost:8080/api/v1/agents/us-east-1-aws-01/config?pop=us-east-1-aws" \
-  -H "X-API-Key: your-key"
+  -H "Authorization: Bearer your-key"
 ```
 
 ### Workflow 3: Audit Changes to a Specific Test
@@ -1324,19 +1328,12 @@ curl -X GET "http://localhost:8080/api/v1/agents/us-east-1-aws-01/config?pop=us-
 ```bash
 # View all mutations on a test
 curl -X GET "http://localhost:8080/api/v1/audit?resource=test&resource_id=test-http-api-health" \
-  -H "X-API-Key: your-key"
+  -H "Authorization: Bearer your-key"
 ```
 
 ---
 
 ## Authentication Examples
-
-### Using X-API-Key Header
-
-```bash
-curl -X GET http://localhost:8080/api/v1/agents \
-  -H "X-API-Key: my-secret-api-key-here"
-```
 
 ### Using Bearer Token
 
@@ -1349,7 +1346,7 @@ curl -X GET http://localhost:8080/api/v1/agents \
 
 ```bash
 curl -X GET http://localhost:8080/api/v1/agents \
-  -H "X-API-Key: invalid-key"
+  -H "Authorization: Bearer invalid-key"
 ```
 
 Response:
@@ -1361,6 +1358,34 @@ Content-Type: application/json
 {
   "error": "unauthorized"
 }
+```
+
+---
+
+## Request Flow
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant API as Control Plane API
+    participant Auth as Auth Middleware
+    participant Rate as Rate Limiter
+    participant Handler as Route Handler
+    participant DB as PostgreSQL
+    participant Audit as Audit Log
+
+    Client->>API: HTTP Request + Bearer Token
+    API->>Rate: Check rate limit
+    Rate-->>API: OK / 429
+    API->>Auth: Validate Bearer token
+    Auth->>DB: Lookup hashed key
+    DB-->>Auth: Key + role + scopes
+    Auth-->>API: Authenticated / 401
+    API->>Handler: Route to handler
+    Handler->>DB: Query / Mutate
+    DB-->>Handler: Result
+    Handler->>Audit: Log mutation (async)
+    Handler-->>Client: JSON Response
 ```
 
 ---

@@ -1,5 +1,7 @@
 # NetVantage Security Hardening Guide
 
+> **Who is this for?** This guide is for anyone deploying NetVantage beyond a local development environment. If you're running `docker compose up` on your laptop for testing, most of this doesn't apply yet. Once you're deploying to staging or production — especially if monitoring production infrastructure or handling sensitive network data — work through this guide section by section. Each section is independent; prioritize based on your threat model.
+
 This guide provides comprehensive security best practices and configuration options for hardening NetVantage deployments across development, staging, and production environments.
 
 **Table of Contents:**
@@ -31,12 +33,47 @@ NetVantage security is built on the principle of **defense in depth** — multip
 - **Data**: PostgreSQL SSL, encrypted secrets in transit and at rest
 - **Operations**: Audit logging, container image signing, SBOM verification
 
+```mermaid
+graph TB
+    subgraph Perimeter
+        TLS[TLS 1.2+/1.3 Encryption]
+        FW[Firewall Rules]
+        NP[K8s NetworkPolicy]
+    end
+
+    subgraph Application
+        Bearer[Bearer Token Auth]
+        RBAC[Role-Based Access]
+        RL[Rate Limiting]
+        OIDC[OIDC/OAuth2 SSO]
+    end
+
+    subgraph Transport
+        NATS_TLS[NATS TLS]
+        KAFKA_SASL[Kafka SASL/SCRAM]
+    end
+
+    subgraph Data
+        PG_SSL[PostgreSQL SSL]
+        VAULT[Vault/SOPS Secrets]
+        HASH[SHA-256 Key Hashing]
+    end
+
+    subgraph Operations
+        AUDIT[Audit Logging]
+        COSIGN[Image Signing — cosign]
+        SBOM[SBOM Generation]
+    end
+
+    Perimeter --> Application --> Transport --> Data --> Operations
+```
+
 ### Least Privilege
 
 All components run with minimal required privileges:
 
 - **Containers**: Non-root user (`uid 65534`), read-only root filesystem, all capabilities dropped except `NET_RAW` for agents
-- **API Keys**: Role-based scoping (agent, reader, admin), expiration enforced
+- **API Keys**: Role-based scoping (`admin`, `agent`), expiration enforced
 - **Kubernetes**: NetworkPolicy defaults to deny-all ingress, whitelisting only necessary traffic
 - **Agents**: Only `CAP_NET_RAW` for ping/traceroute (never `CAP_NET_ADMIN`)
 
@@ -45,6 +82,8 @@ All components run with minimal required privileges:
 ## 2. TLS Configuration
 
 ### Control Plane API Server
+
+**Why TLS matters here:** The Control Plane API transmits API keys, agent configurations, and test definitions. Without TLS, these travel in plaintext — anyone on the network path can intercept API keys and impersonate agents or administrators. In production, TLS is non-negotiable.
 
 Enable TLS on the server to encrypt all API communication:
 
@@ -142,44 +181,45 @@ kubectl rollout restart deployment netvantage-server -n netvantage
 
 NetVantage uses **Bearer token authentication** with SHA-256 hashed storage:
 
-**Create API Keys:**
+**Provisioning API Keys:**
+
+API keys are currently provisioned via the server's initialization process or database seeding. A key management API endpoint (`/api/v1/keys`) is planned for a future release.
+
+To seed an initial admin key (typically done during first deployment):
 
 ```bash
-# Use the control plane API to create keys (role-based)
-curl -X POST https://netvantage.example.com/api/v1/keys \
-  -H "Authorization: Bearer ADMIN_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "agent-pop-us-east-1",
-    "role": "agent",
-    "expiresAt": "2025-12-31T23:59:59Z"
-  }'
+# Generate a secure key
+export API_KEY=$(openssl rand -hex 32)
 
-# Response:
-# {
-#   "id": "key_abc123...",
-#   "key": "nv_pop1_c8f9d2e1a4b7...",  # Store securely, never log
-#   "createdAt": "2025-03-21T...",
-#   "expiresAt": "2025-12-31T..."
-# }
+# Hash it for storage
+export KEY_HASH=$(echo -n "$API_KEY" | sha256sum | cut -d' ' -f1)
+
+# Insert directly into PostgreSQL (initial setup only)
+psql $NETVANTAGE_DB_URL -c "
+  INSERT INTO api_keys (id, key_hash, name, role, created_at)
+  VALUES ('key-admin-001', '$KEY_HASH', 'initial-admin', 'admin', NOW())
+  ON CONFLICT DO NOTHING;
+"
+
+# Store the unhashed key securely — this is the value agents use
+echo "API Key: $API_KEY"
 ```
 
 **Key Rotation:**
 
 ```bash
-# Create new key, deploy to agents, revoke old key after grace period
-# API endpoint: DELETE /api/v1/keys/{id}
-curl -X DELETE https://netvantage.example.com/api/v1/keys/key_old_abc \
-  -H "Authorization: Bearer ADMIN_KEY"
+# 1. Generate new key and insert into database
+# 2. Deploy new key to agents
+# 3. After grace period, delete old key from database
+psql $NETVANTAGE_DB_URL -c "DELETE FROM api_keys WHERE id = 'key-old-001';"
 ```
 
 **Roles and Permissions:**
 
 | Role | Permissions | Use Case |
 |------|-------------|----------|
-| `admin` | Full API access (test CRUD, key management, user provisioning) | Ops/SRE access only |
-| `agent` | Read config, write results, heartbeat only | Agent pods in Kubernetes |
-| `reader` | Read-only access to tests and results | Integrations, dashboards |
+| `admin` | Full API access (test CRUD, agent management, audit log, POP management) | Ops/SRE access only |
+| `agent` | Read config, write heartbeat, register self only | Agent pods in Kubernetes |
 
 **JWT Secret (for internal token signing):**
 
@@ -511,6 +551,8 @@ Implement a secret rotation schedule:
 ## 6. Transport Security
 
 ### NATS JetStream (Default, M1-M8)
+
+**Why encrypt the transport?** Test results flowing through NATS/Kafka contain network topology information — target IPs, DNS records, HTTP responses, traceroute paths, BGP routing data. In multi-tenant or shared-network environments, this data could reveal your infrastructure's attack surface if intercepted.
 
 NATS runs over plaintext by default in development. Secure for production:
 
@@ -1118,7 +1160,7 @@ server:
 
 Audit logs include:
 
-- **API endpoint**: `/api/v1/tests`, `/api/v1/agents`, `/api/v1/keys`, etc.
+- **API endpoint**: `/api/v1/tests`, `/api/v1/agents`, `/api/v1/pops`, `/api/v1/audit`
 - **Actor**: API key ID (hashed for security)
 - **Action**: `create`, `read`, `update`, `delete`, `list`
 - **Resource**: Test ID, Agent ID, Key ID, etc.
@@ -1236,21 +1278,22 @@ Agents cache config locally for resilience when control plane is unreachable:
 
 ### Agent API Key Rotation
 
-Rotate agent credentials regularly:
+Rotate agent credentials regularly. Since API keys are currently provisioned via database seeding (a `/api/v1/keys` management endpoint is planned), rotation is done directly in PostgreSQL:
 
 ```bash
-# Create new agent key with same role
-curl -X POST https://netvantage.example.com/api/v1/keys \
-  -H "Authorization: Bearer ADMIN_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "agent-pop-1-v2", "role": "agent", "expiresAt": "2025-12-31T..."}'
+# 1. Generate new key
+export NEW_KEY=$(openssl rand -hex 32)
+export KEY_HASH=$(echo -n "$NEW_KEY" | sha256sum | cut -d' ' -f1)
 
-# Deploy new key to agent (via ConfigMap, Secret, or config management)
-# Old key automatically rejected after deployment confirms new key works
+# 2. Insert new key into database
+psql $NETVANTAGE_DB_URL -c "
+  INSERT INTO api_keys (id, key_hash, name, role, created_at)
+  VALUES ('key-agent-pop1-v2', '$KEY_HASH', 'agent-pop-1-v2', 'agent', NOW());
+"
 
-# Revoke old key
-curl -X DELETE https://netvantage.example.com/api/v1/keys/key_old \
-  -H "Authorization: Bearer ADMIN_KEY"
+# 3. Deploy new key to agent (via ConfigMap, Secret, or config management)
+# 4. After confirming new key works, revoke old key
+psql $NETVANTAGE_DB_URL -c "DELETE FROM api_keys WHERE id = 'key-agent-pop1-v1';"
 ```
 
 ### Agent Heartbeat

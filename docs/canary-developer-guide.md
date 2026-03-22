@@ -25,31 +25,33 @@ This guide is for Go developers who want to understand, extend, or contribute ne
 
 NetVantage's canary system follows this flow:
 
-```
-Control Plane (PostgreSQL)
-         ↓
-  Agent Configuration
-         ↓
-Agent (cmd/agent/main.go)
-  - Loads test definitions
-  - Registers canary implementations
-  - Executes tests on interval
-  - Buffers results locally
-  - Publishes to transport
-         ↓
-Transport (NATS JetStream or Kafka)
-         ↓
-Metrics Processor (cmd/processor/main.go)
-  - Consumes results from transport
-  - Parses canary-specific metrics
-  - Records Prometheus metrics
-  - Exposes /metrics endpoint
-         ↓
-Prometheus
-         ↓
-Grafana Dashboard
-         ↓
-Alertmanager
+```mermaid
+graph TD
+    CP["Control Plane<br/>(PostgreSQL)"] -->|test definitions| AGENT
+
+    subgraph Agent ["Agent (cmd/agent/main.go)"]
+        LOAD[Load test definitions]
+        REG[Register canary implementations]
+        EXEC[Execute tests on interval]
+        BUF[Buffer results locally]
+        PUB[Publish to transport]
+        LOAD --> REG --> EXEC --> BUF --> PUB
+    end
+
+    AGENT -->|JSON results| TRANSPORT["Transport<br/>(NATS JetStream or Kafka)"]
+
+    subgraph Processor ["Metrics Processor (cmd/processor/main.go)"]
+        CONSUME[Consume from transport]
+        PARSE[Parse canary-specific metrics]
+        RECORD[Record Prometheus metrics]
+        EXPOSE[Expose /metrics endpoint]
+        CONSUME --> PARSE --> RECORD --> EXPOSE
+    end
+
+    TRANSPORT --> Processor
+    Processor -->|remote_write| PROM[Prometheus]
+    PROM --> GRAF[Grafana Dashboard]
+    PROM --> ALERT[Alertmanager]
 ```
 
 **Key design decision:** Canaries are compiled into the agent binary as Go interfaces — NOT via Go's `plugin.Open` system. This avoids version coupling, testing complexity, and fragility. Community extensions use build tags or fork-and-compile.
@@ -60,6 +62,24 @@ Alertmanager
 - **Testability:** All canaries are testable with unit tests and in-memory transports.
 - **Extensibility:** Adding a new canary requires no changes to the core agent loop.
 - **Observability:** Every canary ships with Prometheus metrics, alert rules, and a Grafana dashboard.
+
+### Test Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Defined: Admin creates test via API
+    Defined --> Assigned: Test assigned to POPs
+    Assigned --> Synced: Agent pulls config
+    Synced --> Scheduled: Agent schedules execution
+    Scheduled --> Executing: Interval timer fires
+    Executing --> Published: Result sent to transport
+    Published --> Processed: Metrics Processor consumes
+    Processed --> Stored: Written to Prometheus
+    Stored --> Visualized: Rendered in Grafana
+    Stored --> Alerted: Evaluated by alert rules
+    Executing --> Buffered: Transport unavailable
+    Buffered --> Published: Transport recovers
+```
 
 ---
 
@@ -174,6 +194,15 @@ type Result struct {
 - **Metadata:** Optional key-value pairs for extra context (e.g., `{"tls_version": "TLSv1.3"}`, `{"agent_version": "v1.2.3"}`).
 
 **Set the Agent, POP, and TestType fields in the canary's main agent loop** — the canary implementation doesn't set them. Here's why: multiple canary instances may be executing concurrently, and the agent orchestrates the assignments.
+
+> **⚠️ Important: Two TestDefinition Structs Exist**
+>
+> The codebase has two `TestDefinition` structs with different field types for timing:
+>
+> - **`internal/agent/canary/canary.TestDefinition`** — Used by canary implementations. Timing fields use Go's `time.Duration` (`Interval`, `Timeout`). This is what your canary's `Execute()` method receives.
+> - **`internal/domain/models.TestDefinition`** — Used by the Control Plane API and database layer. Timing fields use `int64` milliseconds (`IntervalMS`, `TimeoutMS`). This is what the REST API accepts and stores.
+>
+> The agent's config sync layer converts between the two: it receives the domain model from the API (with `IntervalMS`/`TimeoutMS` in milliseconds) and converts to the canary model (with `Interval`/`Timeout` as `time.Duration`) before passing to `Execute()`. You don't need to handle this conversion yourself — just use `test.Timeout` as a `time.Duration` in your canary implementation.
 
 ---
 
